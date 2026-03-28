@@ -40,6 +40,21 @@ def test_parse_daily_summary_full():
     assert result["sleepLightMin"] == 240
     assert result["sleepAwakeMin"] == 30
 
+    # New fields — None when not provided in responses
+    assert result["bodyBatteryMin"] == 38  # from body_battery fixture (min of values)
+    assert result["hrvWeeklyAvg"] == 45.0  # present in hrv fixture
+    assert result["hrvBaseline"] is None   # no baseline key in hrv fixture
+    assert result["floorsClimbed"] is None  # parse_floors (no floors fixture) overwrites parse_daily_core value
+    assert result["floorsDescended"] is None  # no floors fixture
+    assert result["respirationAvgWaking"] is None  # no respiration fixture
+    assert result["spo2Avg"] is None  # no spo2 fixture
+    assert result["intensityMinModerate"] is None  # no intensityMinutes fixture
+    assert result["trainingStatus"] is None  # no trainingStatus fixture
+    assert result["trainingLoad7d"] is None  # no trainingStatus fixture
+    assert result["enduranceScore"] is None  # no enduranceScore fixture
+    assert result["hillScore"] is None  # no hillScore fixture
+    assert result["fitnessAge"] is None  # no fitnessAge fixture
+
 
 def test_parse_daily_summary_missing_sleep():
     responses = {
@@ -64,6 +79,21 @@ def test_parse_daily_summary_empty_responses():
     assert result["steps"] is None
     assert result["sleepScore"] is None
     assert not has_data(result)
+
+    # New fields — all None when no responses provided
+    assert result["bodyBatteryMin"] is None
+    assert result["hrvWeeklyAvg"] is None
+    assert result["hrvBaseline"] is None
+    assert result["floorsClimbed"] is None
+    assert result["floorsDescended"] is None
+    assert result["respirationAvgWaking"] is None
+    assert result["spo2Avg"] is None
+    assert result["intensityMinModerate"] is None
+    assert result["trainingStatus"] is None
+    assert result["trainingLoad7d"] is None
+    assert result["enduranceScore"] is None
+    assert result["hillScore"] is None
+    assert result["fitnessAge"] is None
 
 
 def test_parse_activity():
