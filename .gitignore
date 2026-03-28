@@ -7,3 +7,5 @@ logs/
 browser-data/
 .pytest_cache/
 *.local
+dist/
+*.egg-info/
