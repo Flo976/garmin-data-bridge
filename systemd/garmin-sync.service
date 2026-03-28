@@ -1,0 +1,11 @@
+[Unit]
+Description=Garmin Playwright Sync
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=florent
+WorkingDirectory=/home/florent/garmin-playwright-sync
+ExecStart=/home/florent/garmin-playwright-sync/run.sh
+TimeoutStartSec=120
