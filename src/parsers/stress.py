@@ -1,4 +1,5 @@
 """Parse stress data."""
+
 from __future__ import annotations
 
 

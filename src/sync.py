@@ -14,16 +14,16 @@ try:
 except ImportError:
     from playwright.sync_api import sync_playwright
 
-from src.browser import open_persistent_context
 from src.auth import ensure_logged_in
+from src.browser import open_persistent_context
 from src.config import load_config
 from src.parser import (
     has_data,
-    parse_daily_summary,
     parse_activities_list,
-    parse_body_comp,
-    parse_records,
     parse_bb_events,
+    parse_body_comp,
+    parse_daily_summary,
+    parse_records,
 )
 from src.scraper import sync_day
 from src.state import SyncState
@@ -53,11 +53,13 @@ def parse_args() -> argparse.Namespace:
         description="Sync Garmin Connect data via browser interception",
     )
     p.add_argument(
-        "--date", "-d",
+        "--date",
+        "-d",
         help="Sync a specific date (YYYY-MM-DD). Default: today",
     )
     p.add_argument(
-        "--range", "-r",
+        "--range",
+        "-r",
         type=int,
         metavar="DAYS",
         help="Sync the last N days (backfill)",
@@ -78,7 +80,8 @@ def parse_args() -> argparse.Namespace:
         help="Re-sync even if already synced",
     )
     p.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable debug logging",
     )
@@ -91,9 +94,7 @@ def _validate_date(date_str: str) -> str:
         date.fromisoformat(date_str)
         return date_str
     except ValueError:
-        raise argparse.ArgumentTypeError(
-            f"Invalid date: '{date_str}'. Use YYYY-MM-DD format."
-        )
+        raise argparse.ArgumentTypeError(f"Invalid date: '{date_str}'. Use YYYY-MM-DD format.")
 
 
 def _build_date_list(args: argparse.Namespace) -> list[str]:
@@ -175,7 +176,12 @@ def _sync_one_day(
     if body_comp and uploader:
         try:
             uploader.upload_body_comp(body_comp)
-            logger.info("[%s] Body comp: weight=%s bf=%s%%", date_str, body_comp.get("weightKg"), body_comp.get("bodyFatPct"))
+            logger.info(
+                "[%s] Body comp: weight=%s bf=%s%%",
+                date_str,
+                body_comp.get("weightKg"),
+                body_comp.get("bodyFatPct"),
+            )
         except UploadError as e:
             logger.error("[%s] Body comp upload failed: %s", date_str, e)
             upload_ok = False
@@ -205,8 +211,10 @@ def main() -> None:
 
     dates = _build_date_list(args)
     today_str = date.today().isoformat()
-    mode = "login-only" if args.login_only else (
-        f"dry-run ({len(dates)} day(s))" if args.dry_run else f"{len(dates)} day(s)"
+    mode = (
+        "login-only"
+        if args.login_only
+        else (f"dry-run ({len(dates)} day(s))" if args.dry_run else f"{len(dates)} day(s)")
     )
     logger.info("=== Garmin Sync starting [%s] ===", mode)
 
@@ -232,7 +240,7 @@ def main() -> None:
                     continue
 
                 try:
-                    is_today = (date_str == today_str)
+                    is_today = date_str == today_str
                     ok = _sync_one_day(page, date_str, uploader, args.dry_run, is_today)
                     if ok and not args.dry_run:
                         state.mark_synced(date_str)

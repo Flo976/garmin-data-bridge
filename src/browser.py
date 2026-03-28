@@ -6,9 +6,9 @@ import logging
 from pathlib import Path
 
 try:
-    from patchright.sync_api import Playwright, BrowserContext
+    from patchright.sync_api import BrowserContext, Playwright
 except ImportError:
-    from playwright.sync_api import Playwright, BrowserContext
+    from playwright.sync_api import BrowserContext, Playwright
 
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,5 @@
 """Parse body battery data."""
+
 from __future__ import annotations
 
 
@@ -26,11 +27,13 @@ def parse_body_battery_events(events_raw: dict | list) -> list[dict]:
     for ev in events_raw:
         if not isinstance(ev, dict):
             continue
-        result.append({
-            "eventType": ev.get("eventType"),
-            "startGMT": ev.get("startTimestampGMT"),
-            "endGMT": ev.get("endTimestampGMT"),
-            "bodyBatteryImpact": ev.get("bodyBatteryImpact"),
-            "activityName": ev.get("activityName"),
-        })
+        result.append(
+            {
+                "eventType": ev.get("eventType"),
+                "startGMT": ev.get("startTimestampGMT"),
+                "endGMT": ev.get("endTimestampGMT"),
+                "bodyBatteryImpact": ev.get("bodyBatteryImpact"),
+                "activityName": ev.get("activityName"),
+            }
+        )
     return result

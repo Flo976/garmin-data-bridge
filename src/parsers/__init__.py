@@ -1,4 +1,5 @@
 """Individual parsers for each Garmin data category."""
+
 from __future__ import annotations
 
 

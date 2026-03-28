@@ -1,4 +1,5 @@
 """Parse activity list and detail data."""
+
 from __future__ import annotations
 
 
@@ -28,6 +29,7 @@ def parse_activity(act: dict) -> dict:
 def parse_activities_list(responses: dict, date_str: str | None = None) -> list[dict]:
     """Parse activities list from intercepted responses."""
     from src.parsers import _get
+
     activities_raw = _get(responses, "activitylist-service") or _get(responses, "activities")
     if not activities_raw:
         return []

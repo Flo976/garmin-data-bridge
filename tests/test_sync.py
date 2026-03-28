@@ -1,7 +1,9 @@
 import argparse
 from datetime import date, timedelta
-from src.sync import _build_date_list, _validate_date
+
 import pytest
+
+from src.sync import _build_date_list, _validate_date
 
 
 def _args(**kwargs):

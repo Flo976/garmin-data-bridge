@@ -1,25 +1,26 @@
 """Facade — assembles daily summary from individual parsers."""
+
 from __future__ import annotations
 
 from src.parsers import _get, has_data
-from src.parsers.daily import parse_daily_core
-from src.parsers.sleep import parse_sleep
-from src.parsers.stress import parse_stress
+from src.parsers.activities import parse_activities_list, parse_activity
 from src.parsers.body_battery import parse_body_battery, parse_body_battery_events
-from src.parsers.hrv import parse_hrv
+from src.parsers.body_comp import parse_body_composition
+from src.parsers.daily import parse_daily_core
 from src.parsers.fitness import (
-    parse_vo2max,
+    parse_endurance_score,
+    parse_fitness_age,
+    parse_hill_score,
+    parse_race_predictions,
     parse_training_readiness,
     parse_training_status,
-    parse_endurance_score,
-    parse_hill_score,
-    parse_fitness_age,
-    parse_race_predictions,
+    parse_vo2max,
 )
-from src.parsers.vitals import parse_respiration, parse_spo2, parse_intensity_minutes, parse_floors
-from src.parsers.body_comp import parse_body_composition
+from src.parsers.hrv import parse_hrv
 from src.parsers.records import parse_personal_records
-from src.parsers.activities import parse_activity, parse_activities_list
+from src.parsers.sleep import parse_sleep
+from src.parsers.stress import parse_stress
+from src.parsers.vitals import parse_floors, parse_intensity_minutes, parse_respiration, parse_spo2
 
 # Backwards compatibility alias
 _extract_training_readiness = parse_training_readiness

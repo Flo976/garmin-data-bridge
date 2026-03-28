@@ -33,8 +33,6 @@ def load_config(env_file: str | None = None) -> Config:
         garmin_password=os.environ["GARMIN_PASSWORD"],
         webhook_url=os.environ["WEBHOOK_URL"].rstrip("/"),
         webhook_api_key=os.environ["WEBHOOK_API_KEY"],
-        browser_data_dir=os.getenv(
-            "BROWSER_DATA_DIR", str(home / ".garmin-sync" / "browser-data")
-        ),
+        browser_data_dir=os.getenv("BROWSER_DATA_DIR", str(home / ".garmin-sync" / "browser-data")),
         log_dir=os.getenv("LOG_DIR", str(home / ".garmin-sync" / "logs")),
     )

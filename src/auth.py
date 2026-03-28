@@ -114,10 +114,7 @@ def _do_login(page: Page, email: str, password: str, attempt: int = 1) -> None:
         _save_debug(page, f"login-fail-attempt-{attempt}")
         content = page.content()
 
-        if attempt < _MAX_LOGIN_RETRIES and (
-            "UNEXPECTED" in content.upper()
-            or "just a moment" in content.lower()
-        ):
+        if attempt < _MAX_LOGIN_RETRIES and ("UNEXPECTED" in content.upper() or "just a moment" in content.lower()):
             label = "error banner" if "UNEXPECTED" in content.upper() else "Cloudflare"
             logger.warning("%s detected — retrying in 30s (attempt %d)", label, attempt)
             time.sleep(30)

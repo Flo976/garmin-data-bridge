@@ -1,10 +1,16 @@
 """Parse vitals data (respiration, SpO2, intensity minutes, floors)."""
+
 from __future__ import annotations
 
 
 def parse_respiration(raw: dict | None) -> dict:
     if not isinstance(raw, dict):
-        return {"respirationAvgWaking": None, "respirationAvgSleep": None, "respirationMin": None, "respirationMax": None}
+        return {
+            "respirationAvgWaking": None,
+            "respirationAvgSleep": None,
+            "respirationMin": None,
+            "respirationMax": None,
+        }
     return {
         "respirationAvgWaking": raw.get("avgWakingRespirationValue"),
         "respirationAvgSleep": raw.get("avgSleepRespirationValue"),

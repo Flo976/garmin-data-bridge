@@ -1,4 +1,5 @@
 """Parse fitness metrics (VO2max, training status/readiness, scores)."""
+
 from __future__ import annotations
 
 

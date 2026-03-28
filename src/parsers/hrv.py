@@ -1,4 +1,5 @@
 """Parse HRV data."""
+
 from __future__ import annotations
 
 

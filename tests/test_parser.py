@@ -1,11 +1,12 @@
 import json
 from pathlib import Path
+
 from src.parser import (
-    parse_daily_summary,
-    parse_activity,
+    _extract_training_readiness,
     has_data,
     parse_activities_list,
-    _extract_training_readiness,
+    parse_activity,
+    parse_daily_summary,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -43,7 +44,7 @@ def test_parse_daily_summary_full():
     # New fields — None when not provided in responses
     assert result["bodyBatteryMin"] == 38  # from body_battery fixture (min of values)
     assert result["hrvWeeklyAvg"] == 45.0  # present in hrv fixture
-    assert result["hrvBaseline"] is None   # no baseline key in hrv fixture
+    assert result["hrvBaseline"] is None  # no baseline key in hrv fixture
     assert result["floorsClimbed"] is None  # parse_floors (no floors fixture) overwrites parse_daily_core value
     assert result["floorsDescended"] is None  # no floors fixture
     assert result["respirationAvgWaking"] is None  # no respiration fixture
@@ -160,6 +161,7 @@ def test_parse_activities_list_filtered_no_match():
 
 
 # --- Training Readiness ---
+
 
 def test_training_readiness_dict_with_score():
     assert _extract_training_readiness({"score": 62}) == 62

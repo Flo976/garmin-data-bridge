@@ -1,9 +1,17 @@
 """Parse body composition / weight data."""
+
 from __future__ import annotations
 
 
 def parse_body_composition(raw: dict | None) -> dict:
-    empty = {"weightKg": None, "bodyFatPct": None, "bmi": None, "muscleMassKg": None, "boneMassKg": None, "bodyWaterPct": None}
+    empty = {
+        "weightKg": None,
+        "bodyFatPct": None,
+        "bmi": None,
+        "muscleMassKg": None,
+        "boneMassKg": None,
+        "bodyWaterPct": None,
+    }
     if not isinstance(raw, dict):
         return empty
     entries = raw.get("dateWeightList", [])

@@ -48,6 +48,7 @@ _CAPTURE_PATTERNS: list[tuple[str, str]] = [
 @dataclass
 class SyncResult:
     """Holds captured API responses and tracks which pages loaded successfully."""
+
     responses: dict[str, dict | list] = field(default_factory=dict)
     pages_loaded: set[str] = field(default_factory=set)
     pages_failed: set[str] = field(default_factory=set)
@@ -60,6 +61,7 @@ class SyncResult:
 
 def _make_response_handler(captured: dict[str, dict | list]) -> Callable:
     """Create a response handler that captures matched API responses."""
+
     def handler(response: Response) -> None:
         if response.status != 200:
             return

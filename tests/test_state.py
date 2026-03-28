@@ -1,4 +1,3 @@
-import json
 from src.state import SyncState
 
 

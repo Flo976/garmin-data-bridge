@@ -1,4 +1,5 @@
 """Parse sleep data."""
+
 from __future__ import annotations
 
 

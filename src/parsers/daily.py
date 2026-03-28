@@ -1,4 +1,5 @@
 """Parse daily summary (steps, calories, resting HR)."""
+
 from __future__ import annotations
 
 
