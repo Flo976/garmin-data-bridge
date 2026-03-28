@@ -103,6 +103,7 @@ WEBHOOK_API_KEY=your-api-key
 | `./run.sh --login-only` | Log in, save session, exit |
 | `./run.sh --date 2026-03-25` | Sync a specific date |
 | `./run.sh --range 7` | Backfill the last 7 days |
+| `./run.sh --force` | Re-sync even if already synced |
 | `./run.sh -v` | Verbose / debug logging |
 
 ## ⏰ Scheduling
@@ -111,8 +112,9 @@ WEBHOOK_API_KEY=your-api-key
 <summary><b>systemd</b> (recommended)</summary>
 
 ```bash
-sudo cp systemd/garmin-sync.* /etc/systemd/system/
-# Edit WorkingDirectory and User in garmin-sync.service
+# setup.sh auto-generates garmin-sync.service.local with your user/path
+sudo cp systemd/garmin-sync.service.local /etc/systemd/system/garmin-sync.service
+sudo cp systemd/garmin-sync.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now garmin-sync.timer
 ```
