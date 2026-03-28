@@ -1,0 +1,1 @@
+{"bodyBatteryEvents":[{"eventType":"SLEEP","startTimestampGMT":"2026-03-28T00:00:00.0","endTimestampGMT":"2026-03-28T07:00:00.0","bodyBatteryImpact":45,"activityName":null},{"eventType":"ACTIVITY","startTimestampGMT":"2026-03-28T07:30:00.0","endTimestampGMT":"2026-03-28T08:30:00.0","bodyBatteryImpact":-20,"activityName":"Trail Morning"}]}

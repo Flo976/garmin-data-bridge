@@ -1,0 +1,1 @@
+[{"typeId":1,"displayOrder":1,"activity":{"activityId":123},"prTypeLabelKey":"pr_fastest_5k","value":1380.0,"prStartTimeGMTFormatted":"2026-02-15 08:00:00"},{"typeId":2,"displayOrder":2,"activity":{"activityId":456},"prTypeLabelKey":"pr_longest_run","value":21100.0,"prStartTimeGMTFormatted":"2026-01-10 07:00:00"}]
