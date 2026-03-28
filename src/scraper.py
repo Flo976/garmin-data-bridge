@@ -84,7 +84,7 @@ def _make_response_handler(captured: dict[str, dict | list]) -> Callable:
                     captured[f"graphql/{gql_key}"] = gql_data[gql_key]
                     logger.debug("Captured GraphQL: %s", gql_key)
             except Exception:
-                pass
+                logger.debug("Non-JSON response for graphql-gateway on %s, skipping", url)
 
     return handler
 

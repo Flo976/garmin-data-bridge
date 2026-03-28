@@ -31,7 +31,7 @@ def _save_debug(page: Page, label: str) -> None:
         page.screenshot(path=str(path))
         logger.info("Debug screenshot: %s", path)
     except Exception:
-        pass
+        logger.debug("Debug screenshot failed for %s", label)
 
 
 def _wait_for_cloudflare(page: Page) -> None:
