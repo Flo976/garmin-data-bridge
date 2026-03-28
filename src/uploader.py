@@ -44,3 +44,9 @@ class Uploader:
 
     def upload_activity(self, data: dict) -> None:
         self._post("/ingest/activity", data)
+
+    def upload_body_comp(self, data: dict) -> None:
+        self._post("/ingest/body-composition", data)
+
+    def upload_personal_records(self, data: list[dict]) -> None:
+        self._post("/ingest/personal-records", {"records": data})

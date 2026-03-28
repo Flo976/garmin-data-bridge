@@ -17,7 +17,14 @@ except ImportError:
 from src.browser import open_persistent_context
 from src.auth import ensure_logged_in
 from src.config import load_config
-from src.parser import has_data, parse_daily_summary, parse_activities_list
+from src.parser import (
+    has_data,
+    parse_daily_summary,
+    parse_activities_list,
+    parse_body_comp,
+    parse_records,
+    parse_bb_events,
+)
 from src.scraper import sync_day
 from src.state import SyncState
 from src.uploader import Uploader, UploadError
@@ -116,8 +123,17 @@ def _sync_one_day(
     if dry_run:
         logger.info("--- DRY RUN: %s ---", date_str)
         print(json.dumps(daily, indent=2, default=str))
+        body_comp = parse_body_comp(result.responses)
+        if body_comp:
+            print(json.dumps({"body_composition": body_comp}, indent=2, default=str))
+        bb_events = parse_bb_events(result.responses)
+        if bb_events:
+            print(json.dumps({"body_battery_events": bb_events}, indent=2, default=str))
+        records = parse_records(result.responses)
+        if records:
+            print(json.dumps({"personal_records": records}, indent=2, default=str))
         if activities:
-            print(json.dumps(activities, indent=2, default=str))
+            print(json.dumps({"activities": activities}, indent=2, default=str))
         return True
 
     upload_ok = True
@@ -153,6 +169,27 @@ def _sync_one_day(
             len(activities),
             ", ".join(f"{a.get('name', '?')} ({a['type']})" for a in activities),
         )
+
+    # Body composition
+    body_comp = parse_body_comp(result.responses)
+    if body_comp and uploader:
+        try:
+            uploader.upload_body_comp(body_comp)
+            logger.info("[%s] Body comp: weight=%s bf=%s%%", date_str, body_comp.get("weightKg"), body_comp.get("bodyFatPct"))
+        except UploadError as e:
+            logger.error("[%s] Body comp upload failed: %s", date_str, e)
+            upload_ok = False
+
+    # Personal records (only for today)
+    if is_today:
+        records = parse_records(result.responses)
+        if records and uploader:
+            try:
+                uploader.upload_personal_records(records)
+                logger.info("[%s] %d personal record(s)", date_str, len(records))
+            except UploadError as e:
+                logger.error("[%s] Personal records upload failed: %s", date_str, e)
+                upload_ok = False
 
     if not result.is_complete:
         logger.warning("[%s] Partial data (failed pages: %s)", date_str, result.pages_failed)
