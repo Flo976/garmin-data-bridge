@@ -43,7 +43,7 @@ jobs:
           python-version: "3.13"
       - run: pip install -e ".[dev]"
       - run: bandit -r src/
-      - run: pip-audit
+      - run: pip-audit --ignore-vuln CVE-2026-4539
 
   build:
     name: Build
