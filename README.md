@@ -1,35 +1,31 @@
-# Garmin Playwright Sync
+# Garmin Connect Sync
 
-Sync your Garmin Connect health data by intercepting the web app's own API calls via a real browser.
+Automatically sync your Garmin Connect health data to any webhook endpoint. Runs on any Linux machine (laptop, Raspberry Pi) as a cron job.
 
-## Why?
+```
+Garmin watch → Garmin Connect → This tool → Your server
+```
 
-Since March 2026, Garmin hardened authentication via Cloudflare — Python libraries (`garminconnect`, `garth`) are blocked (429/403). Headless browsers are detected. Only a **real Chrome browser** from a **residential IP** works.
+## What it syncs
 
-This tool uses [patchright](https://github.com/AuroraWright/patchright) (undetected Playwright fork) with a real Chrome browser to:
-1. Navigate Garmin Connect like a normal user
-2. Intercept the HTTP responses that Garmin's own React app makes
-3. Parse health metrics and POST them to your webhook endpoint
+| Category | Metrics |
+|----------|---------|
+| **Daily** | Steps, calories, resting HR, VO2max, stress, Body Battery, HRV |
+| **Sleep** | Score, total/deep/REM/light/awake minutes |
+| **Activities** | Type, name, duration, distance, HR avg/max, training effect |
 
-If Garmin changes their API endpoints, their own app adapts — and so do we.
+All metrics are included, even Garmin-proprietary ones (Body Battery, Training Readiness) that aren't available via Health Connect or third-party APIs.
 
 ## How it works
 
-```
-Chrome (xvfb, persistent context, residential IP)
-  → Navigates connect.garmin.com
-    → Garmin's JS loads data (GraphQL, REST)
-      → Patchright intercepts HTTP responses
-        → Parsed and POSTed to your webhook
-```
+Most Garmin libraries stopped working in March 2026 when Garmin added Cloudflare protection. This tool takes a different approach: it opens a **real Chrome browser**, navigates Garmin Connect like a normal user, and intercepts the data that Garmin's own app loads.
 
-## Data synced
+- No API reverse-engineering — if Garmin changes their endpoints, their app adapts, and so do we
+- No headless browser — runs Chrome in headed mode via `xvfb` (virtual display), indistinguishable from a real user
+- Persistent session — cookies are saved to disk, login happens only when the session expires
+- Residential IP required — runs on your home machine, not a server
 
-**Daily summary:** steps, calories, resting HR, VO2max, stress, Body Battery, HRV, sleep (score + phases)
-
-**Activities:** type, name, duration, distance, HR, calories, training effect, VO2max update
-
-## Setup
+## Quick start
 
 ```bash
 git clone https://github.com/Flo976/garmin-playwright-sync.git
@@ -38,7 +34,8 @@ chmod +x setup.sh run.sh
 ./setup.sh
 ```
 
-Edit `config.env`:
+Edit `config.env` with your credentials:
+
 ```env
 GARMIN_EMAIL=your-email@example.com
 GARMIN_PASSWORD=your-password
@@ -46,48 +43,53 @@ WEBHOOK_URL=https://your-server.com
 WEBHOOK_API_KEY=your-api-key
 ```
 
+First run — save your session:
+
+```bash
+./run.sh --login-only
+```
+
+Preview data without uploading:
+
+```bash
+./run.sh --dry-run
+```
+
 ## Usage
 
 ```bash
-# First run — log in and save session
-./run.sh --login-only
-
-# Sync today (preview without uploading)
-./run.sh --dry-run
-
-# Sync today (upload to webhook)
-./run.sh
-
-# Sync a specific date
-./run.sh --date 2026-03-25
-
-# Backfill the last 7 days
-./run.sh --range 7
-
-# Verbose logging
-./run.sh -v --dry-run
+./run.sh                     # Sync today
+./run.sh --dry-run            # Preview JSON output, don't upload
+./run.sh --login-only         # Log in, save session, exit
+./run.sh --date 2026-03-25    # Sync a specific date
+./run.sh --range 7            # Backfill the last 7 days
+./run.sh -v                   # Verbose logging
 ```
 
 ## Scheduling
 
-### Systemd (recommended)
+### systemd (recommended)
 
 ```bash
 sudo cp systemd/garmin-sync.* /etc/systemd/system/
-# Edit paths in .service if needed
+# Edit WorkingDirectory and User in garmin-sync.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now garmin-sync.timer
 ```
 
-### Cron
+### cron
 
 ```cron
-*/15 * * * * /home/you/garmin-playwright-sync/run.sh >> ~/.garmin-sync/logs/cron.log 2>&1
+*/15 * * * * /path/to/garmin-playwright-sync/run.sh >> ~/.garmin-sync/logs/cron.log 2>&1
 ```
 
 ## Webhook format
 
-**POST `{WEBHOOK_URL}/ingest/daily-summary`**
+The tool POSTs JSON to two endpoints with an `Authorization: Bearer {API_KEY}` header.
+
+<details>
+<summary><b>POST /ingest/daily-summary</b></summary>
+
 ```json
 {
   "date": "2026-03-28",
@@ -103,11 +105,14 @@ sudo systemctl enable --now garmin-sync.timer
   "sleepRemMin": 90,
   "sleepLightMin": 240,
   "sleepAwakeMin": 30,
-  "vo2max": null
+  "vo2max": 52.0
 }
 ```
+</details>
 
-**POST `{WEBHOOK_URL}/ingest/activity`**
+<details>
+<summary><b>POST /ingest/activity</b></summary>
+
 ```json
 {
   "garminActivityId": "17234567890",
@@ -124,34 +129,44 @@ sudo systemctl enable --now garmin-sync.timer
   "vo2maxUpdate": 52.0
 }
 ```
-
-Both include `Authorization: Bearer {WEBHOOK_API_KEY}` header.
+</details>
 
 ## Raspberry Pi
 
-Works on **Pi 4** (2 GB+) and **Pi 5** with Raspberry Pi OS 64-bit. Uses system Chromium automatically when available at `/usr/bin/chromium-browser`.
+Works on **Pi 4** (2 GB+) and **Pi 5** with Raspberry Pi OS 64-bit (Bookworm). The tool automatically uses system Chromium when available at `/usr/bin/chromium-browser`.
 
-## Debugging
+## Troubleshooting
 
-On auth failure, screenshots are saved to `~/.garmin-sync/debug/`. Sync state is tracked in `~/.garmin-sync/logs/sync_state.json`.
-
+**Cloudflare "Just a moment" / CAPTCHA**
+The tool handles Cloudflare Turnstile automatically via patchright. If it fails persistently, delete the browser profile and re-login:
 ```bash
-# Check sync state
-cat ~/.garmin-sync/logs/sync_state.json
-
-# Check logs
-tail -50 ~/.garmin-sync/logs/sync.log
-
-# View debug screenshots
-ls ~/.garmin-sync/debug/
+rm -rf ~/.garmin-sync/browser-data
+./run.sh --login-only
 ```
 
-## How it bypasses Cloudflare
+**"AN UNEXPECTED ERROR HAS OCCURRED"**
+Garmin's SSO sometimes returns this transiently. The tool retries automatically (up to 2 attempts with 30s delay).
 
-- **patchright** instead of vanilla Playwright — removes automation fingerprints that Cloudflare Turnstile detects
-- **Not headless**: `xvfb` (virtual display) runs Chrome in headed mode without a physical screen
-- **Persistent context**: cookies and Cloudflare clearance tokens saved to disk between runs
-- **Normal browsing pattern**: visits 3 pages per sync — looks like a regular user
+**Session expired**
+The persistent browser context usually keeps sessions alive for days. When it expires, the tool re-logs in automatically. If it fails, run `--login-only` manually.
+
+**Debug screenshots**
+On any auth failure, screenshots are saved to `~/.garmin-sync/debug/`.
+
+**Logs and state**
+```bash
+tail -50 ~/.garmin-sync/logs/sync.log       # Recent logs
+cat ~/.garmin-sync/logs/sync_state.json      # Last sync per date
+ls ~/.garmin-sync/debug/                     # Auth failure screenshots
+```
+
+## Requirements
+
+- Linux (tested on Ubuntu 24.04 / WSL2, Raspberry Pi OS Bookworm)
+- Python 3.11+
+- Google Chrome or Chromium
+- xvfb
+- Residential IP (datacenter/cloud IPs are blocked by Garmin/Cloudflare)
 
 ## License
 
