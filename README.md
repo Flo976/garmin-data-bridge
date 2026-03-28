@@ -12,6 +12,8 @@
   <a href="https://www.raspberrypi.com/"><img src="https://img.shields.io/badge/Raspberry%20Pi-4%20%2F%205-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white" /></a>
   <img src="https://img.shields.io/badge/platform-Linux-FCC624?style=flat-square&logo=linux&logoColor=black" />
   <img src="https://img.shields.io/badge/Cloudflare-bypassed-F38020?style=flat-square&logo=cloudflare&logoColor=white" />
+  <a href="https://github.com/Flo976/garmin-data-bridge/actions/workflows/ci.yml"><img src="https://github.com/Flo976/garmin-data-bridge/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/Flo976/garmin-data-bridge/releases/latest"><img src="https://img.shields.io/github/v/release/Flo976/garmin-data-bridge?style=flat-square&label=release" alt="Release" /></a>
 </p>
 
 <p align="center">
