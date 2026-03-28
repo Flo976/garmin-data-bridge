@@ -1,7 +1,12 @@
 #!/bin/bash
 cd "$(dirname "$0")"
 source .venv/bin/activate
-export $(grep -v '^#' config.env | grep -v '^\s*$' | xargs)
+
+# Load config safely (handles passwords with #, *, spaces, etc.)
+set -a
+source config.env
+set +a
 
 # xvfb-run launches a virtual display for headed Chromium
-xvfb-run --auto-servernum python3 -m src.sync "$@" 2>&1 | tee -a ~/.garmin-sync/logs/sync.log
+# Logging is handled by src/sync.py — no tee needed
+xvfb-run --auto-servernum python3 -m src.sync "$@"

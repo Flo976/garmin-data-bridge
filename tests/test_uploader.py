@@ -1,5 +1,6 @@
+import pytest
 from unittest.mock import patch, MagicMock
-from src.uploader import Uploader
+from src.uploader import Uploader, UploadError
 
 
 def _mock_response(status_code=200):
@@ -55,3 +56,17 @@ def test_upload_retries_on_failure():
         uploader.upload_daily_summary(data)
 
         assert mock_post.call_count == 2
+
+
+def test_upload_raises_after_exhausted_retries():
+    with patch("src.uploader.requests.post") as mock_post:
+        mock_post.side_effect = [
+            _mock_response(500),
+            _mock_response(500),
+        ]
+
+        uploader = Uploader("https://my-server.com", "key123", max_retries=2)
+        data = {"date": "2026-03-28", "steps": 100}
+
+        with pytest.raises(UploadError, match="Upload failed after 2 attempts"):
+            uploader.upload_daily_summary(data)

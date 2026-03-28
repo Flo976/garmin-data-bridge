@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass, field
 from typing import Callable
 
 try:
@@ -24,6 +25,19 @@ _CAPTURE_PATTERNS: list[tuple[str, str]] = [
     ("fitnessStats-service/trainingReadiness", "trainingReadiness"),
     ("activitylist-service/activities", "activities"),
 ]
+
+
+@dataclass
+class SyncResult:
+    """Holds captured API responses and tracks which pages loaded successfully."""
+    responses: dict[str, dict | list] = field(default_factory=dict)
+    pages_loaded: set[str] = field(default_factory=set)
+    pages_failed: set[str] = field(default_factory=set)
+
+    @property
+    def is_complete(self) -> bool:
+        """True if all attempted pages loaded without error."""
+        return len(self.pages_failed) == 0 and len(self.pages_loaded) > 0
 
 
 def _make_response_handler(captured: dict[str, dict | list]) -> Callable:
@@ -55,41 +69,61 @@ def _make_response_handler(captured: dict[str, dict | list]) -> Callable:
     return handler
 
 
-def sync_day(page: Page, date_str: str) -> dict[str, dict | list]:
-    """Navigate daily pages and return all captured API responses."""
-    captured: dict[str, dict | list] = {}
-    handler = _make_response_handler(captured)
+def _navigate(page: Page, url: str, result: SyncResult, label: str) -> None:
+    """Navigate to a page and track success/failure."""
+    try:
+        logger.info("Loading %s", label)
+        page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+        page.wait_for_load_state("networkidle", timeout=15_000)
+        result.pages_loaded.add(label)
+    except Exception as e:
+        logger.warning("Page load failed for %s: %s", label, e)
+        result.pages_failed.add(label)
+
+
+def sync_day(page: Page, date_str: str, include_activities: bool = True) -> SyncResult:
+    """Navigate daily pages and return all captured API responses.
+
+    Args:
+        page: The browser page to use.
+        date_str: Date to sync (YYYY-MM-DD).
+        include_activities: Whether to load the activities page.
+            Set to False during backfill to avoid re-uploading.
+    """
+    result = SyncResult()
+    handler = _make_response_handler(result.responses)
     page.on("response", handler)
 
     try:
-        logger.info("Loading daily summary for %s", date_str)
-        page.goto(
+        _navigate(
+            page,
             f"https://connect.garmin.com/app/daily-summary/{date_str}",
-            wait_until="domcontentloaded",
-            timeout=30_000,
+            result,
+            f"daily summary ({date_str})",
         )
-        page.wait_for_load_state("networkidle", timeout=15_000)
 
-        logger.info("Loading sleep data for %s", date_str)
-        page.goto(
+        _navigate(
+            page,
             f"https://connect.garmin.com/app/sleep/{date_str}",
-            wait_until="domcontentloaded",
-            timeout=30_000,
+            result,
+            f"sleep ({date_str})",
         )
-        page.wait_for_load_state("networkidle", timeout=15_000)
 
-        logger.info("Loading activities list")
-        page.goto(
-            "https://connect.garmin.com/app/activities",
-            wait_until="domcontentloaded",
-            timeout=30_000,
-        )
-        page.wait_for_load_state("networkidle", timeout=15_000)
+        if include_activities:
+            _navigate(
+                page,
+                "https://connect.garmin.com/app/activities",
+                result,
+                "activities",
+            )
 
-    except Exception as e:
-        logger.error("Navigation error during sync: %s", e)
     finally:
         page.remove_listener("response", handler)
 
-    logger.info("Captured %d API responses", len(captured))
-    return captured
+    logger.info(
+        "Captured %d API responses (pages: %d ok, %d failed)",
+        len(result.responses),
+        len(result.pages_loaded),
+        len(result.pages_failed),
+    )
+    return result

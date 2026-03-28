@@ -29,11 +29,12 @@ def test_load_config_defaults(monkeypatch):
     assert cfg.log_dir.endswith("logs")
 
 
-def test_load_config_missing_required(monkeypatch):
+def test_load_config_missing_required(monkeypatch, tmp_path):
     monkeypatch.delenv("GARMIN_EMAIL", raising=False)
     monkeypatch.delenv("GARMIN_PASSWORD", raising=False)
     monkeypatch.delenv("WEBHOOK_URL", raising=False)
     monkeypatch.delenv("WEBHOOK_API_KEY", raising=False)
 
+    # Use a non-existent env file to prevent dotenv from loading config.env
     with pytest.raises(ValueError, match="GARMIN_EMAIL"):
-        load_config()
+        load_config(env_file=str(tmp_path / "nonexistent.env"))

@@ -35,6 +35,14 @@ def parse_daily_summary(responses: dict, date_str: str) -> dict:
     readiness_raw = _get(responses, "trainingReadiness") or {}
     training_readiness = readiness_raw.get("score") if isinstance(readiness_raw, dict) else None
 
+    # VO2max: try maxmet endpoint first, fallback to daily summary
+    maxmet_raw = _get(responses, "maxmet") or []
+    vo2max = None
+    if isinstance(maxmet_raw, list) and maxmet_raw:
+        vo2max = maxmet_raw[0].get("generic") or maxmet_raw[0].get("cycling")
+    if vo2max is None:
+        vo2max = summary.get("vo2Max")
+
     def _sleep_min(key: str) -> int | None:
         val = sleep_dto.get(key)
         return val // 60 if val is not None else None
@@ -54,7 +62,7 @@ def parse_daily_summary(responses: dict, date_str: str) -> dict:
         "sleepRemMin": _sleep_min("remSleepSeconds"),
         "sleepLightMin": _sleep_min("lightSleepSeconds"),
         "sleepAwakeMin": _sleep_min("awakeSleepSeconds"),
-        "vo2max": summary.get("vo2Max"),
+        "vo2max": vo2max,
     }
 
 
@@ -85,11 +93,22 @@ def has_data(daily: dict) -> bool:
     return any(v is not None for k, v in daily.items() if k not in skip)
 
 
-def parse_activities_list(responses: dict) -> list[dict]:
-    """Parse activities list from intercepted responses."""
+def parse_activities_list(responses: dict, date_str: str | None = None) -> list[dict]:
+    """Parse activities list from intercepted responses.
+
+    Args:
+        responses: Captured API responses.
+        date_str: If provided, only return activities matching this date (YYYY-MM-DD).
+    """
     activities_raw = _get(responses, "activitylist-service") or _get(responses, "activities")
     if not activities_raw:
         return []
     if isinstance(activities_raw, dict):
         activities_raw = activities_raw.get("activityList", activities_raw.get("activities", []))
-    return [parse_activity(act) for act in activities_raw]
+
+    parsed = [parse_activity(act) for act in activities_raw]
+
+    if date_str:
+        parsed = [a for a in parsed if a.get("date", "")[:10] == date_str]
+
+    return parsed

@@ -108,3 +108,16 @@ def test_parse_activities_list():
     assert len(result) == 2
     assert result[0]["garminActivityId"] == "17234567890"
     assert result[1]["garminActivityId"] == "17234567891"
+
+
+def test_parse_activities_list_filtered_by_date():
+    responses = {"activities": load_fixture("activities_response.json")}
+    # Both fixture activities are on 2026-03-28
+    result = parse_activities_list(responses, date_str="2026-03-28")
+    assert len(result) == 2
+
+
+def test_parse_activities_list_filtered_no_match():
+    responses = {"activities": load_fixture("activities_response.json")}
+    result = parse_activities_list(responses, date_str="2020-01-01")
+    assert len(result) == 0

@@ -20,7 +20,7 @@ from src.config import load_config
 from src.parser import has_data, parse_daily_summary, parse_activities_list
 from src.scraper import sync_day
 from src.state import SyncState
-from src.uploader import Uploader
+from src.uploader import Uploader, UploadError
 
 logger = logging.getLogger(__name__)
 
@@ -66,11 +66,27 @@ def parse_args() -> argparse.Namespace:
         help="Log in and save session, then exit",
     )
     p.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-sync even if already synced",
+    )
+    p.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Enable debug logging",
     )
     return p.parse_args()
+
+
+def _validate_date(date_str: str) -> str:
+    """Validate and return a date string in YYYY-MM-DD format."""
+    try:
+        date.fromisoformat(date_str)
+        return date_str
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"Invalid date: '{date_str}'. Use YYYY-MM-DD format."
+        )
 
 
 def _build_date_list(args: argparse.Namespace) -> list[str]:
@@ -79,7 +95,7 @@ def _build_date_list(args: argparse.Namespace) -> list[str]:
         today = date.today()
         return [(today - timedelta(days=i)).isoformat() for i in range(args.range)]
     if args.date:
-        return [args.date]
+        return [_validate_date(args.date)]
     return [date.today().isoformat()]
 
 
@@ -87,38 +103,49 @@ def _sync_one_day(
     page,
     date_str: str,
     uploader: Uploader | None,
-    state: SyncState,
     dry_run: bool,
-) -> dict:
-    """Sync a single day. Returns the parsed daily summary."""
-    responses = sync_day(page, date_str)
+    is_today: bool,
+) -> bool:
+    """Sync a single day. Returns True if sync completed successfully."""
+    # Only load activities page for today (avoids re-uploading on backfill)
+    result = sync_day(page, date_str, include_activities=is_today)
 
-    daily = parse_daily_summary(responses, date_str)
-    activities = parse_activities_list(responses)
+    daily = parse_daily_summary(result.responses, date_str)
+    activities = parse_activities_list(result.responses, date_str) if is_today else []
 
     if dry_run:
         logger.info("--- DRY RUN: %s ---", date_str)
         print(json.dumps(daily, indent=2, default=str))
         if activities:
             print(json.dumps(activities, indent=2, default=str))
-        return daily
+        return True
+
+    upload_ok = True
 
     if has_data(daily) and uploader:
-        uploader.upload_daily_summary(daily)
-        logger.info(
-            "[%s] Daily: steps=%s bb=%s hrv=%s sleep=%s",
-            date_str,
-            daily.get("steps"),
-            daily.get("bodyBattery"),
-            daily.get("hrvGarmin"),
-            daily.get("sleepScore"),
-        )
+        try:
+            uploader.upload_daily_summary(daily)
+            logger.info(
+                "[%s] Daily: steps=%s bb=%s hrv=%s sleep=%s",
+                date_str,
+                daily.get("steps"),
+                daily.get("bodyBattery"),
+                daily.get("hrvGarmin"),
+                daily.get("sleepScore"),
+            )
+        except UploadError as e:
+            logger.error("[%s] Daily summary upload failed: %s", date_str, e)
+            upload_ok = False
     else:
         logger.info("[%s] No daily data", date_str)
 
     if uploader:
         for act in activities:
-            uploader.upload_activity(act)
+            try:
+                uploader.upload_activity(act)
+            except UploadError as e:
+                logger.error("[%s] Activity upload failed: %s", date_str, e)
+                upload_ok = False
     if activities:
         logger.info(
             "[%s] %d activite(s): %s",
@@ -127,8 +154,11 @@ def _sync_one_day(
             ", ".join(f"{a.get('name', '?')} ({a['type']})" for a in activities),
         )
 
-    state.mark_synced(date_str)
-    return daily
+    if not result.is_complete:
+        logger.warning("[%s] Partial data (failed pages: %s)", date_str, result.pages_failed)
+        upload_ok = False
+
+    return upload_ok
 
 
 def main() -> None:
@@ -137,6 +167,7 @@ def main() -> None:
     setup_logging(cfg.log_dir, verbose=args.verbose)
 
     dates = _build_date_list(args)
+    today_str = date.today().isoformat()
     mode = "login-only" if args.login_only else (
         f"dry-run ({len(dates)} day(s))" if args.dry_run else f"{len(dates)} day(s)"
     )
@@ -159,11 +190,17 @@ def main() -> None:
             uploader = None if args.dry_run else Uploader(cfg.webhook_url, cfg.webhook_api_key)
 
             for date_str in dates:
+                if not args.force and not args.dry_run and state.is_synced(date_str):
+                    logger.info("[%s] Already synced — skipping (use --force to re-sync)", date_str)
+                    continue
+
                 try:
-                    _sync_one_day(page, date_str, uploader, state, args.dry_run)
+                    is_today = (date_str == today_str)
+                    ok = _sync_one_day(page, date_str, uploader, args.dry_run, is_today)
+                    if ok and not args.dry_run:
+                        state.mark_synced(date_str)
                 except Exception as e:
                     logger.error("[%s] Sync failed: %s", date_str, e)
-                    # Continue with next day on per-day errors
                     continue
 
         except Exception as e:
