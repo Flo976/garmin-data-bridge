@@ -15,15 +15,33 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 _CAPTURE_PATTERNS: list[tuple[str, str]] = [
+    # Daily summary page
     ("usersummary-service/usersummary/daily", "usersummary/daily"),
-    ("wellness-service/wellness/dailySleepData", "dailySleepData"),
-    ("wellness-service/wellness/dailyHeartRate", "dailyHeartRate"),
     ("wellness-service/wellness/dailyStress", "dailyStress"),
     ("bodybattery-service/bodybattery", "bodybattery"),
+    ("wellness-service/wellness/daily/respiration", "respiration"),
+    ("wellness-service/wellness/daily/spo2", "spo2"),
+    ("wellness-service/wellness/daily/im", "intensityMinutes"),
+    ("wellness-service/wellness/floorsChartData/daily", "floors"),
+    ("wellness-service/wellness/bodyBattery/events", "bodyBatteryEvents"),
+    # Sleep page
+    ("wellness-service/wellness/dailySleepData", "dailySleepData"),
     ("hrv-service/hrv", "hrv"),
+    # Fitness stats pages
     ("metrics-service/metrics/maxmet/daily", "maxmet"),
     ("fitnessStats-service/trainingReadiness", "trainingReadiness"),
+    ("metrics-service/metrics/trainingstatus/aggregated", "trainingStatus"),
+    ("metrics-service/metrics/endurancescore", "enduranceScore"),
+    ("metrics-service/metrics/hillscore", "hillScore"),
+    ("metrics-service/metrics/racepredictions", "racePredictions"),
+    ("fitnessage-service/fitnessage", "fitnessAge"),
+    # Body composition page
+    ("weight-service/weight/dateRange", "bodyComposition"),
+    ("weight-service/weight/range", "bodyComposition"),
+    # Activities page
     ("activitylist-service/activities", "activities"),
+    # Personal records page
+    ("personalrecord-service/personalrecord/prs", "personalRecords"),
 ]
 
 
@@ -82,14 +100,7 @@ def _navigate(page: Page, url: str, result: SyncResult, label: str) -> None:
 
 
 def sync_day(page: Page, date_str: str, include_activities: bool = True) -> SyncResult:
-    """Navigate daily pages and return all captured API responses.
-
-    Args:
-        page: The browser page to use.
-        date_str: Date to sync (YYYY-MM-DD).
-        include_activities: Whether to load the activities page.
-            Set to False during backfill to avoid re-uploading.
-    """
+    """Navigate daily pages and return all captured API responses."""
     result = SyncResult()
     handler = _make_response_handler(result.responses)
     page.on("response", handler)
@@ -109,6 +120,20 @@ def sync_day(page: Page, date_str: str, include_activities: bool = True) -> Sync
             f"sleep ({date_str})",
         )
 
+        _navigate(
+            page,
+            f"https://connect.garmin.com/app/health-stats/training-status/{date_str}",
+            result,
+            f"training status ({date_str})",
+        )
+
+        _navigate(
+            page,
+            "https://connect.garmin.com/app/body-composition",
+            result,
+            "body composition",
+        )
+
         if include_activities:
             _navigate(
                 page,
@@ -116,6 +141,13 @@ def sync_day(page: Page, date_str: str, include_activities: bool = True) -> Sync
                 result,
                 "activities",
             )
+
+        _navigate(
+            page,
+            "https://connect.garmin.com/app/personal-records",
+            result,
+            "personal records",
+        )
 
     finally:
         page.remove_listener("response", handler)
