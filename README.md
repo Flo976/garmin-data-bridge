@@ -29,19 +29,25 @@
 ## 📊 What it syncs
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  DAILY          │  SLEEP           │  ACTIVITIES        │
-│─────────────────│──────────────────│────────────────────│
-│  Steps          │  Sleep score     │  Type & name       │
-│  Calories       │  Total minutes   │  Duration          │
-│  Resting HR     │  Deep sleep      │  Distance          │
-│  VO2max         │  REM sleep       │  HR avg / max      │
-│  Stress avg     │  Light sleep     │  Calories           │
-│  Body Battery   │  Awake time      │  Training effect   │
-│  Training       │                  │  VO2max update     │
-│    Readiness    │                  │                    │
-│  HRV            │                  │                    │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  DAILY HEALTH    │  SLEEP           │  FITNESS           │  BODY            │
+│──────────────────│──────────────────│────────────────────│──────────────────│
+│  Steps           │  Sleep score     │  VO2max            │  Weight          │
+│  Calories        │  Total minutes   │  Training          │  Body fat %      │
+│  Resting HR      │  Deep sleep      │    Readiness       │  BMI             │
+│  Stress avg      │  REM sleep       │  Training Status   │  Muscle mass     │
+│  Body Battery    │  Light sleep     │  Endurance score   │  Bone mass       │
+│  HRV             │  Awake time      │  Hill score        │  Body water %    │
+│  Respiration     │                  │  Fitness age       │                  │
+│  SpO2            │  ACTIVITIES      │  Race predictions  │  RECORDS         │
+│  Intensity mins  │──────────────────│                    │──────────────────│
+│  Floors climbed  │  Type & name     │                    │  Personal bests  │
+│                  │  Duration        │                    │  (5K, 10K, etc.) │
+│                  │  Distance        │                    │                  │
+│                  │  HR avg / max    │                    │                  │
+│                  │  Training effect │                    │                  │
+│                  │  VO2max update   │                    │                  │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 All metrics included — even Garmin-proprietary ones (**Body Battery**, **Training Readiness**, **HRV**) that aren't available via Health Connect or third-party APIs.
@@ -141,19 +147,44 @@ JSON is POSTed with `Authorization: Bearer {API_KEY}` header.
   "steps": 8432,
   "calories": 2150,
   "restingHr": 52,
+  "floorsClimbed": 12,
   "stressAvg": 32,
   "bodyBattery": 85,
+  "bodyBatteryMin": 38,
   "trainingReadiness": 62,
+  "trainingStatus": "PRODUCTIVE",
+  "trainingLoad7d": 524.5,
   "hrvGarmin": 42.0,
+  "hrvWeeklyAvg": 45.0,
+  "hrvBaseline": 35.0,
+  "respirationAvgWaking": 16.0,
+  "respirationAvgSleep": 14.5,
+  "respirationMin": 12.0,
+  "respirationMax": 22.0,
+  "spo2Avg": 96.0,
+  "spo2Min": 92.0,
+  "spo2Latest": 97.0,
+  "intensityMinModerate": 15,
+  "intensityMinVigorous": 10,
+  "intensityMinWeeklyTotal": 135,
   "sleepScore": 81,
   "sleepTotalMin": 450,
   "sleepDeepMin": 90,
   "sleepRemMin": 90,
   "sleepLightMin": 240,
   "sleepAwakeMin": 30,
-  "vo2max": 52.0
+  "vo2max": 52.0,
+  "enduranceScore": 72.0,
+  "hillScore": 58.0,
+  "fitnessAge": 28,
+  "racePrediction5k": 1380.0,
+  "racePrediction10k": 2940.0,
+  "racePredictionHalf": 6600.0,
+  "racePredictionMarathon": 14100.0
 }
 ```
+
+All fields are nullable — only fields with available data are non-null.
 </details>
 
 <details>
@@ -173,6 +204,34 @@ JSON is POSTed with `Authorization: Bearer {API_KEY}` header.
   "trainingEffectAerobic": 3.8,
   "trainingEffectAnaerobic": 1.2,
   "vo2maxUpdate": 52.0
+}
+```
+</details>
+
+<details>
+<summary><b>POST /ingest/body-composition</b></summary>
+
+```json
+{
+  "weightKg": 75.4,
+  "bodyFatPct": 18.5,
+  "bmi": 23.8,
+  "muscleMassKg": 34.2,
+  "boneMassKg": 3.2,
+  "bodyWaterPct": 55.2
+}
+```
+</details>
+
+<details>
+<summary><b>POST /ingest/personal-records</b></summary>
+
+```json
+{
+  "records": [
+    {"type": "pr_fastest_5k", "value": 1380.0, "date": "2026-02-15 08:00:00", "activityId": 123},
+    {"type": "pr_longest_run", "value": 21100.0, "date": "2026-01-10 07:00:00", "activityId": 456}
+  ]
 }
 ```
 </details>
