@@ -1,0 +1,32 @@
+[
+  {
+    "activityId": 17234567890,
+    "activityName": "Trail Morning",
+    "startTimeLocal": "2026-03-28 07:30:00",
+    "activityType": {"typeKey": "trail_running", "typeId": 5},
+    "duration": 3845.0,
+    "distance": 8234.5,
+    "elevationGain": 320.0,
+    "averageHR": 148.0,
+    "maxHR": 172.0,
+    "calories": 680.0,
+    "aerobicTrainingEffect": 3.8,
+    "anaerobicTrainingEffect": 1.2,
+    "vO2MaxValue": 52.0
+  },
+  {
+    "activityId": 17234567891,
+    "activityName": "Afternoon Walk",
+    "startTimeLocal": "2026-03-28 16:00:00",
+    "activityType": {"typeKey": "walking", "typeId": 9},
+    "duration": 1800.0,
+    "distance": 2100.0,
+    "elevationGain": 15.0,
+    "averageHR": 95.0,
+    "maxHR": 110.0,
+    "calories": 120.0,
+    "aerobicTrainingEffect": 1.0,
+    "anaerobicTrainingEffect": 0.0,
+    "vO2MaxValue": null
+  }
+]

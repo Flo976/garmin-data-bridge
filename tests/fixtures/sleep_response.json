@@ -1,0 +1,16 @@
+{
+  "dailySleepDTO": {
+    "calendarDate": "2026-03-28",
+    "sleepTimeInSeconds": 27000,
+    "deepSleepSeconds": 5400,
+    "lightSleepSeconds": 14400,
+    "remSleepSeconds": 5400,
+    "awakeSleepSeconds": 1800,
+    "sleepScores": {
+      "overall": 81,
+      "totalDuration": {"value": 78},
+      "stress": {"value": 85},
+      "revitalizationScore": {"value": 80}
+    }
+  }
+}

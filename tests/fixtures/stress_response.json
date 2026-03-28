@@ -1,0 +1,9 @@
+{
+  "overallStressLevel": 32,
+  "restStressDuration": 18000,
+  "activityStressDuration": 7200,
+  "lowStressDuration": 28800,
+  "mediumStressDuration": 14400,
+  "highStressDuration": 3600,
+  "calendarDate": "2026-03-28"
+}
