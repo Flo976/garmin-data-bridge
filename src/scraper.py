@@ -6,7 +6,10 @@ import json
 import logging
 from typing import Callable
 
-from playwright.sync_api import Page, Response
+try:
+    from patchright.sync_api import Page, Response
+except ImportError:
+    from playwright.sync_api import Page, Response
 
 logger = logging.getLogger(__name__)
 

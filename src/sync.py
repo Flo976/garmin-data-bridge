@@ -7,7 +7,10 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
+try:
+    from patchright.sync_api import sync_playwright
+except ImportError:
+    from playwright.sync_api import sync_playwright
 
 from src.browser import open_persistent_context
 from src.auth import ensure_logged_in

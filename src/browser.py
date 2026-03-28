@@ -5,11 +5,19 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from playwright.sync_api import Playwright, BrowserContext
+try:
+    from patchright.sync_api import Playwright, BrowserContext
+except ImportError:
+    from playwright.sync_api import Playwright, BrowserContext
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_CHROMIUM = "/usr/bin/chromium-browser"
+_CHROME_CANDIDATES = [
+    "/opt/google/chrome/chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium-browser",
+]
 
 _BROWSER_ARGS = [
     "--disable-blink-features=AutomationControlled",
@@ -25,14 +33,22 @@ _BROWSER_ARGS = [
 ]
 
 
+def _find_chrome() -> str | None:
+    """Find a real Chrome/Chromium binary on the system."""
+    for path in _CHROME_CANDIDATES:
+        if Path(path).exists():
+            return path
+    return None
+
+
 def open_persistent_context(
     pw: Playwright,
     user_data_dir: str,
 ) -> BrowserContext:
-    """Open a persistent Chromium context, reusing cookies from previous runs."""
+    """Open a persistent Chrome context, reusing cookies from previous runs."""
     Path(user_data_dir).mkdir(parents=True, exist_ok=True)
 
-    executable = _SYSTEM_CHROMIUM if Path(_SYSTEM_CHROMIUM).exists() else None
+    executable = _find_chrome()
 
     kwargs = dict(
         user_data_dir=user_data_dir,
@@ -42,10 +58,10 @@ def open_persistent_context(
     )
     if executable:
         kwargs["executable_path"] = executable
-        logger.info("Using system Chromium: %s", executable)
+        logger.info("Using system Chrome: %s", executable)
     else:
-        kwargs["channel"] = "chromium"
-        logger.info("Using Playwright-managed Chromium")
+        kwargs["channel"] = "chrome"
+        logger.info("No system Chrome found, trying Playwright channel 'chrome'")
 
     context = pw.chromium.launch_persistent_context(**kwargs)
     logger.info("Browser context opened (data dir: %s)", user_data_dir)
