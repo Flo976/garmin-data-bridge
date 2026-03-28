@@ -1,11 +1,12 @@
 [Unit]
-Description=Garmin Playwright Sync
+Description=Garmin Data Bridge Sync
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=florent
-WorkingDirectory=/home/florent/garmin-playwright-sync
-ExecStart=/home/florent/garmin-playwright-sync/run.sh
+# TODO: Replace with your username and install path
+User=%REPLACE_USER%
+WorkingDirectory=%REPLACE_PATH%
+ExecStart=%REPLACE_PATH%/run.sh
 TimeoutStartSec=120

@@ -3,11 +3,34 @@
 from __future__ import annotations
 
 
-def _get(responses: dict, key: str) -> dict | list | None:
+def _get(responses: dict[str, dict | list], key: str) -> dict | list | None:
     """Find a response by partial key match."""
     for url_fragment, data in responses.items():
         if key in url_fragment:
             return data
+    return None
+
+
+def _extract_training_readiness(raw: dict | list | None) -> float | None:
+    """Extract training readiness score from various response shapes."""
+    if raw is None:
+        return None
+    # Shape 1: dict with "score" key
+    if isinstance(raw, dict):
+        if "score" in raw:
+            return raw["score"]
+        # Shape 2: dict with nested list (e.g. {"entries": [{"score": 62}]})
+        for key in ("entries", "days", "readiness"):
+            items = raw.get(key, [])
+            if isinstance(items, list) and items:
+                first = items[0]
+                if isinstance(first, dict) and "score" in first:
+                    return first["score"]
+    # Shape 3: list of daily readiness objects
+    if isinstance(raw, list) and raw:
+        first = raw[0]
+        if isinstance(first, dict) and "score" in first:
+            return first["score"]
     return None
 
 
@@ -32,8 +55,8 @@ def parse_daily_summary(responses: dict, date_str: str) -> dict:
     hrv_summaries = hrv_raw.get("hrvSummaries", [])
     hrv_last_night = hrv_summaries[0].get("lastNightAvg") if hrv_summaries else None
 
-    readiness_raw = _get(responses, "trainingReadiness") or {}
-    training_readiness = readiness_raw.get("score") if isinstance(readiness_raw, dict) else None
+    readiness_raw = _get(responses, "trainingReadiness")
+    training_readiness = _extract_training_readiness(readiness_raw)
 
     # VO2max: try maxmet endpoint first, fallback to daily summary
     maxmet_raw = _get(responses, "maxmet") or []
@@ -45,7 +68,7 @@ def parse_daily_summary(responses: dict, date_str: str) -> dict:
 
     def _sleep_min(key: str) -> int | None:
         val = sleep_dto.get(key)
-        return val // 60 if val is not None else None
+        return round(val / 60) if val is not None else None
 
     return {
         "date": date_str,
@@ -68,7 +91,7 @@ def parse_daily_summary(responses: dict, date_str: str) -> dict:
 
 def parse_activity(act: dict) -> dict:
     """Parse a single Garmin activity into a generic activity payload."""
-    def _int_or_none(val):
+    def _int_or_none(val: int | float | None) -> int | None:
         return int(val) if val is not None else None
 
     return {

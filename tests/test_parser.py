@@ -1,6 +1,12 @@
 import json
 from pathlib import Path
-from src.parser import parse_daily_summary, parse_activity, has_data, parse_activities_list
+from src.parser import (
+    parse_daily_summary,
+    parse_activity,
+    has_data,
+    parse_activities_list,
+    _extract_training_readiness,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -121,3 +127,36 @@ def test_parse_activities_list_filtered_no_match():
     responses = {"activities": load_fixture("activities_response.json")}
     result = parse_activities_list(responses, date_str="2020-01-01")
     assert len(result) == 0
+
+
+# --- Training Readiness ---
+
+def test_training_readiness_dict_with_score():
+    assert _extract_training_readiness({"score": 62}) == 62
+
+
+def test_training_readiness_list_of_entries():
+    assert _extract_training_readiness([{"score": 75, "date": "2026-03-28"}]) == 75
+
+
+def test_training_readiness_nested_entries():
+    assert _extract_training_readiness({"entries": [{"score": 58}]}) == 58
+
+
+def test_training_readiness_none():
+    assert _extract_training_readiness(None) is None
+    assert _extract_training_readiness({}) is None
+    assert _extract_training_readiness([]) is None
+
+
+def test_parse_daily_summary_with_readiness_and_maxmet():
+    responses = {
+        "usersummary/daily": load_fixture("daily_summary_response.json"),
+        "trainingReadiness": load_fixture("training_readiness_response.json"),
+        "maxmet": load_fixture("maxmet_response.json"),
+    }
+
+    result = parse_daily_summary(responses, "2026-03-28")
+
+    assert result["trainingReadiness"] == 62
+    assert result["vo2max"] == 52.0

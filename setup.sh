@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== Garmin Playwright Sync — Setup ==="
+echo "=== Garmin Data Bridge — Setup ==="
 
 # System deps
 sudo apt-get update
@@ -34,6 +34,16 @@ if [ ! -f config.env ]; then
     cp config.example.env config.env
     echo ">>> Edit config.env with your Garmin credentials"
 fi
+
+# Prepare systemd files with actual user/path
+INSTALL_DIR="$(pwd)"
+INSTALL_USER="$(whoami)"
+sed "s|%REPLACE_USER%|${INSTALL_USER}|g; s|%REPLACE_PATH%|${INSTALL_DIR}|g" \
+    systemd/garmin-sync.service > systemd/garmin-sync.service.local
+echo "Systemd service configured for user=${INSTALL_USER} path=${INSTALL_DIR}"
+echo "  To install: sudo cp systemd/garmin-sync.service.local /etc/systemd/system/garmin-sync.service"
+echo "              sudo cp systemd/garmin-sync.timer /etc/systemd/system/"
+echo "              sudo systemctl daemon-reload && sudo systemctl enable --now garmin-sync.timer"
 
 echo ""
 echo "=== Setup complete ==="
