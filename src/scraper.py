@@ -21,6 +21,7 @@ _CAPTURE_PATTERNS: list[tuple[str, str]] = [
     ("bodybattery-service/bodybattery", "bodybattery"),
     ("hrv-service/hrv", "hrv"),
     ("metrics-service/metrics/maxmet/daily", "maxmet"),
+    ("fitnessStats-service/trainingReadiness", "trainingReadiness"),
     ("activitylist-service/activities", "activities"),
 ]
 

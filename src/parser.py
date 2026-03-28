@@ -32,6 +32,9 @@ def parse_daily_summary(responses: dict, date_str: str) -> dict:
     hrv_summaries = hrv_raw.get("hrvSummaries", [])
     hrv_last_night = hrv_summaries[0].get("lastNightAvg") if hrv_summaries else None
 
+    readiness_raw = _get(responses, "trainingReadiness") or {}
+    training_readiness = readiness_raw.get("score") if isinstance(readiness_raw, dict) else None
+
     def _sleep_min(key: str) -> int | None:
         val = sleep_dto.get(key)
         return val // 60 if val is not None else None
@@ -43,6 +46,7 @@ def parse_daily_summary(responses: dict, date_str: str) -> dict:
         "restingHr": summary.get("restingHeartRate"),
         "stressAvg": stress.get("overallStressLevel"),
         "bodyBattery": max(bb_values) if bb_values else None,
+        "trainingReadiness": training_readiness,
         "hrvGarmin": hrv_last_night,
         "sleepScore": sleep_scores.get("overall"),
         "sleepTotalMin": _sleep_min("sleepTimeInSeconds"),
