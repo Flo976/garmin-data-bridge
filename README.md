@@ -1,12 +1,12 @@
 # Garmin Playwright Sync
 
-Sync your Garmin Connect health data by intercepting the web app's own API calls via Playwright.
+Sync your Garmin Connect health data by intercepting the web app's own API calls via a real browser.
 
 ## Why?
 
-Since March 2026, Garmin hardened authentication via Cloudflare — Python libraries (`garminconnect`, `garth`) are blocked (429/403). Headless browsers are detected. Only a **real Chromium browser** from a **residential IP** works.
+Since March 2026, Garmin hardened authentication via Cloudflare — Python libraries (`garminconnect`, `garth`) are blocked (429/403). Headless browsers are detected. Only a **real Chrome browser** from a **residential IP** works.
 
-This tool uses Playwright with a real (non-headless) Chromium browser to:
+This tool uses [patchright](https://github.com/AuroraWright/patchright) (undetected Playwright fork) with a real Chrome browser to:
 1. Navigate Garmin Connect like a normal user
 2. Intercept the HTTP responses that Garmin's own React app makes
 3. Parse health metrics and POST them to your webhook endpoint
@@ -16,33 +16,25 @@ If Garmin changes their API endpoints, their own app adapts — and so do we.
 ## How it works
 
 ```
-Chromium (xvfb, persistent context, residential IP)
+Chrome (xvfb, persistent context, residential IP)
   → Navigates connect.garmin.com
     → Garmin's JS loads data (GraphQL, REST)
-      → Playwright intercepts HTTP responses
+      → Patchright intercepts HTTP responses
         → Parsed and POSTed to your webhook
 ```
 
 ## Data synced
 
-**Daily summary:**
-- Steps, calories, resting HR, VO2max
-- Stress (average level)
-- Body Battery (max/min)
-- HRV (last night average)
-- Sleep: score, total/deep/REM/light/awake minutes
+**Daily summary:** steps, calories, resting HR, VO2max, stress, Body Battery, HRV, sleep (score + phases)
 
-**Activities:**
-- Type, name, duration, distance
-- HR (avg/max), calories, elevation gain
-- Training effect (aerobic/anaerobic)
-- VO2max update
+**Activities:** type, name, duration, distance, HR, calories, training effect, VO2max update
 
 ## Setup
 
 ```bash
-git clone https://github.com/your-user/garmin-playwright-sync.git
+git clone https://github.com/Flo976/garmin-playwright-sync.git
 cd garmin-playwright-sync
+chmod +x setup.sh run.sh
 ./setup.sh
 ```
 
@@ -54,14 +46,46 @@ WEBHOOK_URL=https://your-server.com
 WEBHOOK_API_KEY=your-api-key
 ```
 
-Test:
+## Usage
+
 ```bash
+# First run — log in and save session
+./run.sh --login-only
+
+# Sync today (preview without uploading)
+./run.sh --dry-run
+
+# Sync today (upload to webhook)
 ./run.sh
+
+# Sync a specific date
+./run.sh --date 2026-03-25
+
+# Backfill the last 7 days
+./run.sh --range 7
+
+# Verbose logging
+./run.sh -v --dry-run
+```
+
+## Scheduling
+
+### Systemd (recommended)
+
+```bash
+sudo cp systemd/garmin-sync.* /etc/systemd/system/
+# Edit paths in .service if needed
+sudo systemctl daemon-reload
+sudo systemctl enable --now garmin-sync.timer
+```
+
+### Cron
+
+```cron
+*/15 * * * * /home/you/garmin-playwright-sync/run.sh >> ~/.garmin-sync/logs/cron.log 2>&1
 ```
 
 ## Webhook format
-
-The tool POSTs JSON to two endpoints:
 
 **POST `{WEBHOOK_URL}/ingest/daily-summary`**
 ```json
@@ -103,33 +127,31 @@ The tool POSTs JSON to two endpoints:
 
 Both include `Authorization: Bearer {WEBHOOK_API_KEY}` header.
 
-## Scheduling
-
-### Systemd (recommended)
-
-```bash
-sudo cp systemd/garmin-sync.* /etc/systemd/system/
-# Edit paths in .service if needed
-sudo systemctl daemon-reload
-sudo systemctl enable --now garmin-sync.timer
-```
-
-### Cron
-
-```cron
-*/15 * * * * /home/you/garmin-playwright-sync/run.sh >> ~/.garmin-sync/logs/cron.log 2>&1
-```
-
 ## Raspberry Pi
 
 Works on **Pi 4** (2 GB+) and **Pi 5** with Raspberry Pi OS 64-bit. Uses system Chromium automatically when available at `/usr/bin/chromium-browser`.
 
-## How it stays undetected
+## Debugging
 
-- **Not headless**: Uses `xvfb` (virtual display) so Chromium runs in headed mode without a physical screen
-- **Persistent context**: Cookies and session data are saved to disk between runs — no re-login every time
-- **Normal browsing pattern**: Visits 3 pages every 15 min — looks like a regular user
-- **No API reverse-engineering**: We don't call Garmin APIs directly — we let their React app do it and intercept the responses
+On auth failure, screenshots are saved to `~/.garmin-sync/debug/`. Sync state is tracked in `~/.garmin-sync/logs/sync_state.json`.
+
+```bash
+# Check sync state
+cat ~/.garmin-sync/logs/sync_state.json
+
+# Check logs
+tail -50 ~/.garmin-sync/logs/sync.log
+
+# View debug screenshots
+ls ~/.garmin-sync/debug/
+```
+
+## How it bypasses Cloudflare
+
+- **patchright** instead of vanilla Playwright — removes automation fingerprints that Cloudflare Turnstile detects
+- **Not headless**: `xvfb` (virtual display) runs Chrome in headed mode without a physical screen
+- **Persistent context**: cookies and Cloudflare clearance tokens saved to disk between runs
+- **Normal browsing pattern**: visits 3 pages per sync — looks like a regular user
 
 ## License
 
