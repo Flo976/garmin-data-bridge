@@ -9,9 +9,9 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 try:
-    from patchright.sync_api import Page, Response, BrowserContext
+    from patchright.sync_api import BrowserContext, Page, Response
 except ImportError:
-    from playwright.sync_api import Page, Response, BrowserContext
+    from playwright.sync_api import BrowserContext, Page, Response
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +109,7 @@ def _recover_page(page: Page, context: BrowserContext) -> Page:
     try:
         page.close()
     except Exception:
-        pass
+        logger.debug("Could not close crashed page (already dead)")
     new_page = context.new_page()
     time.sleep(1)
     return new_page
@@ -236,7 +236,7 @@ def sync_day(
         try:
             page.remove_listener("response", handler)
         except Exception:
-            pass
+            logger.debug("Could not remove response handler (page may have crashed)")
 
     logger.info(
         "Captured %d API responses (pages: %d ok, %d failed)",

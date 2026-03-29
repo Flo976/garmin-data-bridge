@@ -26,7 +26,7 @@ from src.parser import (
     parse_daily_summary,
     parse_records,
 )
-from src.scraper import sync_day, ALL_PAGES, DEFAULT_PAGES
+from src.scraper import ALL_PAGES, DEFAULT_PAGES, sync_day
 from src.state import SyncState
 from src.uploader import Uploader, UploadError
 
@@ -156,7 +156,8 @@ def _sync_one_day(
     result, page = sync_day(page, date_str, include_activities=is_today, pages=effective_pages, context=context)
 
     daily = parse_daily_summary(result.responses, date_str)
-    activities = parse_activities_list(result.responses, date_str) if is_today and (effective_pages is None or "activities" in effective_pages) else []
+    include_act = is_today and (effective_pages is None or "activities" in effective_pages)
+    activities = parse_activities_list(result.responses, date_str) if include_act else []
 
     if dry_run:
         logger.info("--- DRY RUN: %s ---", date_str)
