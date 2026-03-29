@@ -53,6 +53,7 @@ def test_validate_date_bad_format():
 
 # --- _parse_pages tests ---
 
+
 def test_parse_pages_default():
     assert _parse_pages(None) == DEFAULT_PAGES
 

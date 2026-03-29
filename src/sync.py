@@ -130,8 +130,7 @@ def _parse_pages(pages_arg: str | None) -> set[str]:
     invalid = requested - ALL_PAGES
     if invalid:
         raise argparse.ArgumentTypeError(
-            f"Unknown page(s): {', '.join(sorted(invalid))}. "
-            f"Valid pages: {', '.join(sorted(ALL_PAGES))}"
+            f"Unknown page(s): {', '.join(sorted(invalid))}. Valid pages: {', '.join(sorted(ALL_PAGES))}"
         )
     if not requested:
         raise argparse.ArgumentTypeError("--pages requires at least one page")
@@ -287,8 +286,13 @@ def main() -> None:
                 try:
                     is_today = date_str == today_str
                     ok, page = _sync_one_day(
-                        page, date_str, uploader, args.dry_run, is_today,
-                        pages=pages, context=context,
+                        page,
+                        date_str,
+                        uploader,
+                        args.dry_run,
+                        is_today,
+                        pages=pages,
+                        context=context,
                     )
                     if ok and not args.dry_run:
                         state.mark_synced(date_str)
