@@ -113,10 +113,27 @@ WEBHOOK_API_KEY=your-api-key
 | `./run.sh --range 7` | Backfill the last 7 days |
 | `./run.sh --force` | Re-sync even if already synced |
 | `./run.sh --pages daily` | Only sync the daily summary |
-| `./run.sh --pages daily,sleep` | Sync daily + sleep (skip activities) |
+| `./run.sh --pages daily,sleep` | Sync daily + sleep only |
 | `./run.sh -v` | Verbose / debug logging |
 
-Available pages: `daily`, `sleep`, `activities`. Default: all. Can also be set via `SYNC_PAGES` in `config.env`.
+### Page selection
+
+Use `--pages` to choose which Garmin pages to scrape. This reduces sync time and avoids loading pages you don't need.
+
+| Page | Data captured |
+|------|---------------|
+| `daily` | Steps, calories, resting HR, stress, Body Battery, respiration, SpO2, intensity minutes, floors |
+| `sleep` | Sleep score, sleep stages (deep/REM/light/awake), HRV |
+| `training-status` | VO2max, training readiness, training status, endurance/hill scores, fitness age, race predictions |
+| `body-composition` | Weight, body fat %, BMI, muscle mass, bone mass, body water % |
+| `activities` | Recent activities (type, duration, distance, HR, training effect) |
+| `personal-records` | Personal bests (5K, 10K, half marathon, etc.) |
+
+Default: all pages. Can also be set permanently via `SYNC_PAGES` in `config.env`:
+
+```env
+SYNC_PAGES=daily,sleep
+```
 
 ## ⏰ Scheduling
 
@@ -316,7 +333,6 @@ PRs welcome! Some ideas:
 |------|-------------|
 | 🍎 **macOS support** | Adapt or replace xvfb for macOS |
 | 🐳 **Docker image** | Chrome + xvfb in a container |
-| ⚖️ **Body composition** | Weight, body fat %, muscle mass |
 | 👥 **Multi-account** | Config-driven multiple Garmin accounts |
 | 🔔 **Failure alerts** | Slack / Discord / email on repeated failures |
 | 📈 **Prometheus exporter** | Expose metrics for Grafana dashboards |
