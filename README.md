@@ -112,7 +112,11 @@ WEBHOOK_API_KEY=your-api-key
 | `./run.sh --date 2026-03-25` | Sync a specific date |
 | `./run.sh --range 7` | Backfill the last 7 days |
 | `./run.sh --force` | Re-sync even if already synced |
+| `./run.sh --pages daily` | Only sync the daily summary |
+| `./run.sh --pages daily,sleep` | Sync daily + sleep (skip activities) |
 | `./run.sh -v` | Verbose / debug logging |
+
+Available pages: `daily`, `sleep`, `activities`. Default: all. Can also be set via `SYNC_PAGES` in `config.env`.
 
 ## ⏰ Scheduling
 

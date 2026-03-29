@@ -4,15 +4,20 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Callable
 
 try:
-    from patchright.sync_api import Page, Response
+    from patchright.sync_api import Page, Response, BrowserContext
 except ImportError:
-    from playwright.sync_api import Page, Response
+    from playwright.sync_api import Page, Response, BrowserContext
 
 logger = logging.getLogger(__name__)
+
+# All available pages that can be scraped
+ALL_PAGES = {"daily", "sleep", "training-status", "body-composition", "activities", "personal-records"}
+DEFAULT_PAGES = {"daily", "sleep", "training-status", "body-composition", "activities", "personal-records"}
 
 _CAPTURE_PATTERNS: list[tuple[str, str]] = [
     # Daily summary page
@@ -89,8 +94,45 @@ def _make_response_handler(captured: dict[str, dict | list]) -> Callable:
     return handler
 
 
-def _navigate(page: Page, url: str, result: SyncResult, label: str) -> None:
-    """Navigate to a page and track success/failure."""
+def _is_page_crashed(page: Page) -> bool:
+    """Check if the page has crashed and is no longer usable."""
+    try:
+        page.evaluate("1")
+        return False
+    except Exception:
+        return True
+
+
+def _recover_page(page: Page, context: BrowserContext) -> Page:
+    """Close a crashed page and create a fresh one."""
+    logger.info("Recovering from page crash — creating new page")
+    try:
+        page.close()
+    except Exception:
+        pass
+    new_page = context.new_page()
+    time.sleep(1)
+    return new_page
+
+
+def _navigate(
+    page: Page,
+    url: str,
+    result: SyncResult,
+    label: str,
+    context: BrowserContext | None = None,
+) -> Page:
+    """Navigate to a page and track success/failure.
+
+    Returns the page (may be a new page if recovery was needed).
+    """
+    if _is_page_crashed(page):
+        if context is None:
+            logger.error("Page crashed and no context for recovery — skipping %s", label)
+            result.pages_failed.add(label)
+            return page
+        page = _recover_page(page, context)
+
     try:
         logger.info("Loading %s", label)
         page.goto(url, wait_until="domcontentloaded", timeout=30_000)
@@ -99,60 +141,102 @@ def _navigate(page: Page, url: str, result: SyncResult, label: str) -> None:
     except Exception as e:
         logger.warning("Page load failed for %s: %s", label, e)
         result.pages_failed.add(label)
+        if context and _is_page_crashed(page):
+            page = _recover_page(page, context)
+
+    return page
 
 
-def sync_day(page: Page, date_str: str, include_activities: bool = True) -> SyncResult:
-    """Navigate daily pages and return all captured API responses."""
+def sync_day(
+    page: Page,
+    date_str: str,
+    include_activities: bool = True,
+    pages: set[str] | None = None,
+    context: BrowserContext | None = None,
+) -> tuple[SyncResult, Page]:
+    """Navigate daily pages and return all captured API responses.
+
+    Args:
+        page: The browser page to use.
+        date_str: Date to sync (YYYY-MM-DD).
+        include_activities: Whether to load the activities page (legacy flag).
+        pages: Set of pages to load (e.g. {"daily", "sleep", "activities"}).
+            When provided, this overrides include_activities.
+            Defaults to ALL_PAGES if None.
+        context: Browser context, used to recover from page crashes.
+
+    Returns:
+        A tuple of (SyncResult, page) — page may differ from input if recovery occurred.
+    """
+    if pages is None:
+        pages = DEFAULT_PAGES.copy()
+        if not include_activities:
+            pages.discard("activities")
+
     result = SyncResult()
     handler = _make_response_handler(result.responses)
     page.on("response", handler)
 
     try:
-        _navigate(
-            page,
-            f"https://connect.garmin.com/app/daily-summary/{date_str}",
-            result,
-            f"daily summary ({date_str})",
-        )
+        if "daily" in pages:
+            page = _navigate(
+                page,
+                f"https://connect.garmin.com/app/daily-summary/{date_str}",
+                result,
+                f"daily summary ({date_str})",
+                context,
+            )
 
-        _navigate(
-            page,
-            f"https://connect.garmin.com/app/sleep/{date_str}",
-            result,
-            f"sleep ({date_str})",
-        )
+        if "sleep" in pages:
+            page = _navigate(
+                page,
+                f"https://connect.garmin.com/app/sleep/{date_str}",
+                result,
+                f"sleep ({date_str})",
+                context,
+            )
 
-        _navigate(
-            page,
-            f"https://connect.garmin.com/app/health-stats/training-status/{date_str}",
-            result,
-            f"training status ({date_str})",
-        )
+        if "training-status" in pages:
+            page = _navigate(
+                page,
+                f"https://connect.garmin.com/app/health-stats/training-status/{date_str}",
+                result,
+                f"training status ({date_str})",
+                context,
+            )
 
-        _navigate(
-            page,
-            "https://connect.garmin.com/app/body-composition",
-            result,
-            "body composition",
-        )
+        if "body-composition" in pages:
+            page = _navigate(
+                page,
+                "https://connect.garmin.com/app/body-composition",
+                result,
+                "body composition",
+                context,
+            )
 
-        if include_activities:
-            _navigate(
+        if "activities" in pages:
+            page = _navigate(
                 page,
                 "https://connect.garmin.com/app/activities",
                 result,
                 "activities",
+                context,
             )
 
-        _navigate(
-            page,
-            "https://connect.garmin.com/app/personal-records",
-            result,
-            "personal records",
-        )
+        if "personal-records" in pages:
+            page = _navigate(
+                page,
+                "https://connect.garmin.com/app/personal-records",
+                result,
+                "personal records",
+                context,
+            )
 
     finally:
-        page.remove_listener("response", handler)
+        try:
+            page.remove_listener("response", handler)
+        except Exception:
+            pass
 
     logger.info(
         "Captured %d API responses (pages: %d ok, %d failed)",
@@ -160,4 +244,4 @@ def sync_day(page: Page, date_str: str, include_activities: bool = True) -> Sync
         len(result.pages_loaded),
         len(result.pages_failed),
     )
-    return result
+    return result, page

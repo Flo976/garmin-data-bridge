@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -25,7 +26,7 @@ from src.parser import (
     parse_daily_summary,
     parse_records,
 )
-from src.scraper import sync_day
+from src.scraper import sync_day, ALL_PAGES, DEFAULT_PAGES
 from src.state import SyncState
 from src.uploader import Uploader, UploadError
 
@@ -80,6 +81,15 @@ def parse_args() -> argparse.Namespace:
         help="Re-sync even if already synced",
     )
     p.add_argument(
+        "--pages",
+        type=str,
+        metavar="PAGES",
+        help=(
+            f"Comma-separated list of pages to sync: {', '.join(sorted(ALL_PAGES))}. "
+            f"Default: {','.join(sorted(DEFAULT_PAGES))}"
+        ),
+    )
+    p.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -107,19 +117,46 @@ def _build_date_list(args: argparse.Namespace) -> list[str]:
     return [date.today().isoformat()]
 
 
+def _parse_pages(pages_arg: str | None) -> set[str]:
+    """Parse --pages argument into a set of page names.
+
+    Falls back to SYNC_PAGES env var if --pages is not provided.
+    """
+    if pages_arg is None:
+        pages_arg = os.getenv("SYNC_PAGES")
+    if pages_arg is None:
+        return DEFAULT_PAGES.copy()
+    requested = {p.strip().lower() for p in pages_arg.split(",") if p.strip()}
+    invalid = requested - ALL_PAGES
+    if invalid:
+        raise argparse.ArgumentTypeError(
+            f"Unknown page(s): {', '.join(sorted(invalid))}. "
+            f"Valid pages: {', '.join(sorted(ALL_PAGES))}"
+        )
+    if not requested:
+        raise argparse.ArgumentTypeError("--pages requires at least one page")
+    return requested
+
+
 def _sync_one_day(
     page,
     date_str: str,
     uploader: Uploader | None,
     dry_run: bool,
     is_today: bool,
-) -> bool:
-    """Sync a single day. Returns True if sync completed successfully."""
-    # Only load activities page for today (avoids re-uploading on backfill)
-    result = sync_day(page, date_str, include_activities=is_today)
+    pages: set[str] | None = None,
+    context=None,
+) -> tuple[bool, object]:
+    """Sync a single day. Returns (success, page) — page may change after crash recovery."""
+    # Filter activities/records to today only (avoids re-uploading on backfill)
+    effective_pages = pages
+    if effective_pages is not None and not is_today:
+        effective_pages = effective_pages - {"activities", "personal-records"}
+
+    result, page = sync_day(page, date_str, include_activities=is_today, pages=effective_pages, context=context)
 
     daily = parse_daily_summary(result.responses, date_str)
-    activities = parse_activities_list(result.responses, date_str) if is_today else []
+    activities = parse_activities_list(result.responses, date_str) if is_today and (effective_pages is None or "activities" in effective_pages) else []
 
     if dry_run:
         logger.info("--- DRY RUN: %s ---", date_str)
@@ -135,7 +172,7 @@ def _sync_one_day(
             print(json.dumps({"personal_records": records}, indent=2, default=str))
         if activities:
             print(json.dumps({"activities": activities}, indent=2, default=str))
-        return True
+        return True, page
 
     upload_ok = True
 
@@ -201,13 +238,19 @@ def _sync_one_day(
         logger.warning("[%s] Partial data (failed pages: %s)", date_str, result.pages_failed)
         upload_ok = False
 
-    return upload_ok
+    return upload_ok, page
 
 
 def main() -> None:
     args = parse_args()
     cfg = load_config()
     setup_logging(cfg.log_dir, verbose=args.verbose)
+
+    try:
+        pages = _parse_pages(args.pages)
+    except argparse.ArgumentTypeError as e:
+        logger.error(str(e))
+        sys.exit(1)
 
     dates = _build_date_list(args)
     today_str = date.today().isoformat()
@@ -216,7 +259,8 @@ def main() -> None:
         if args.login_only
         else (f"dry-run ({len(dates)} day(s))" if args.dry_run else f"{len(dates)} day(s)")
     )
-    logger.info("=== Garmin Sync starting [%s] ===", mode)
+    pages_label = ",".join(sorted(pages))
+    logger.info("=== Garmin Sync starting [%s, pages: %s] ===", mode, pages_label)
 
     state = SyncState(cfg.log_dir)
 
@@ -241,7 +285,10 @@ def main() -> None:
 
                 try:
                     is_today = date_str == today_str
-                    ok = _sync_one_day(page, date_str, uploader, args.dry_run, is_today)
+                    ok, page = _sync_one_day(
+                        page, date_str, uploader, args.dry_run, is_today,
+                        pages=pages, context=context,
+                    )
                     if ok and not args.dry_run:
                         state.mark_synced(date_str)
                 except Exception as e:
