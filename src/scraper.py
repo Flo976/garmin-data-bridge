@@ -122,6 +122,7 @@ def _navigate(
     label: str,
     context: BrowserContext | None = None,
     response_handler: Callable | None = None,
+    idle_timeout_ms: int = 5_000,
 ) -> Page:
     """Navigate to a page and track success/failure.
 
@@ -154,7 +155,7 @@ def _navigate(
     # Garmin's SPA keeps background requests running indefinitely.
     # The response handler captures data regardless.
     try:
-        page.wait_for_load_state("networkidle", timeout=15_000)
+        page.wait_for_load_state("networkidle", timeout=idle_timeout_ms)
     except Exception:
         logger.debug("networkidle timeout for %s (non-fatal, data captured via handler)", label)
     result.pages_loaded.add(label)
@@ -168,6 +169,7 @@ def sync_day(
     include_activities: bool = True,
     pages: set[str] | None = None,
     context: BrowserContext | None = None,
+    idle_timeout_ms: int = 5_000,
 ) -> tuple[SyncResult, Page]:
     """Navigate daily pages and return all captured API responses.
 
@@ -179,6 +181,9 @@ def sync_day(
             When provided, this overrides include_activities.
             Defaults to ALL_PAGES if None.
         context: Browser context, used to recover from page crashes.
+        idle_timeout_ms: How long to wait for networkidle after domcontentloaded.
+            Garmin's SPA never reaches true idle, so this is a best-effort wait.
+            Tune upward (e.g. NETWORK_IDLE_TIMEOUT_MS=10000) on slow connections.
 
     Returns:
         A tuple of (SyncResult, page) — page may differ from input if recovery occurred.
@@ -201,6 +206,7 @@ def sync_day(
                 f"daily summary ({date_str})",
                 context,
                 handler,
+                idle_timeout_ms,
             )
 
         if "sleep" in pages:
@@ -211,6 +217,7 @@ def sync_day(
                 f"sleep ({date_str})",
                 context,
                 handler,
+                idle_timeout_ms,
             )
 
         if "training-status" in pages:
@@ -221,6 +228,7 @@ def sync_day(
                 f"training status ({date_str})",
                 context,
                 handler,
+                idle_timeout_ms,
             )
 
         if "body-composition" in pages:
@@ -231,6 +239,7 @@ def sync_day(
                 "body composition",
                 context,
                 handler,
+                idle_timeout_ms,
             )
 
         if "activities" in pages:
@@ -241,6 +250,7 @@ def sync_day(
                 "activities",
                 context,
                 handler,
+                idle_timeout_ms,
             )
 
         if "personal-records" in pages:
@@ -251,6 +261,7 @@ def sync_day(
                 "personal records",
                 context,
                 handler,
+                idle_timeout_ms,
             )
 
     finally:

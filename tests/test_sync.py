@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.scraper import ALL_PAGES, DEFAULT_PAGES
-from src.sync import _build_date_list, _parse_pages, _sync_one_day, _validate_date
+from src.sync import _build_date_list, _parse_idle_timeout, _parse_pages, _sync_one_day, _validate_date
 
 
 def _args(**kwargs):
@@ -93,6 +93,36 @@ def test_parse_pages_env_var(monkeypatch):
 def test_parse_pages_cli_overrides_env(monkeypatch):
     monkeypatch.setenv("SYNC_PAGES", "daily")
     assert _parse_pages("sleep,activities") == {"sleep", "activities"}
+
+
+# --- _parse_idle_timeout tests ---
+
+
+def test_parse_idle_timeout_default(monkeypatch):
+    monkeypatch.delenv("NETWORK_IDLE_TIMEOUT_MS", raising=False)
+    assert _parse_idle_timeout() == 5_000
+
+
+def test_parse_idle_timeout_from_env(monkeypatch):
+    monkeypatch.setenv("NETWORK_IDLE_TIMEOUT_MS", "10000")
+    assert _parse_idle_timeout() == 10_000
+
+
+def test_parse_idle_timeout_zero_allowed(monkeypatch):
+    monkeypatch.setenv("NETWORK_IDLE_TIMEOUT_MS", "0")
+    assert _parse_idle_timeout() == 0
+
+
+def test_parse_idle_timeout_invalid_string(monkeypatch):
+    monkeypatch.setenv("NETWORK_IDLE_TIMEOUT_MS", "fast")
+    with pytest.raises(argparse.ArgumentTypeError, match="non-negative integer"):
+        _parse_idle_timeout()
+
+
+def test_parse_idle_timeout_negative(monkeypatch):
+    monkeypatch.setenv("NETWORK_IDLE_TIMEOUT_MS", "-1")
+    with pytest.raises(argparse.ArgumentTypeError, match="non-negative integer"):
+        _parse_idle_timeout()
 
 
 # --- _sync_one_day upload-gating tests ---
