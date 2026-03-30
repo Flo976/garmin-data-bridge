@@ -161,15 +161,17 @@ def _sync_one_day(
     if dry_run:
         logger.info("--- DRY RUN: %s ---", date_str)
         print(json.dumps(daily, indent=2, default=str))
-        body_comp = parse_body_comp(result.responses)
-        if body_comp:
-            print(json.dumps({"body_composition": body_comp}, indent=2, default=str))
+        if effective_pages is None or "body-composition" in effective_pages:
+            body_comp = parse_body_comp(result.responses)
+            if body_comp:
+                print(json.dumps({"body_composition": body_comp}, indent=2, default=str))
         bb_events = parse_bb_events(result.responses)
         if bb_events:
             print(json.dumps({"body_battery_events": bb_events}, indent=2, default=str))
-        records = parse_records(result.responses)
-        if records:
-            print(json.dumps({"personal_records": records}, indent=2, default=str))
+        if is_today and (effective_pages is None or "personal-records" in effective_pages):
+            records = parse_records(result.responses)
+            if records:
+                print(json.dumps({"personal_records": records}, indent=2, default=str))
         if activities:
             print(json.dumps({"activities": activities}, indent=2, default=str))
         return True, page
@@ -209,22 +211,23 @@ def _sync_one_day(
         )
 
     # Body composition
-    body_comp = parse_body_comp(result.responses)
-    if body_comp and uploader:
-        try:
-            uploader.upload_body_comp(body_comp)
-            logger.info(
-                "[%s] Body comp: weight=%s bf=%s%%",
-                date_str,
-                body_comp.get("weightKg"),
-                body_comp.get("bodyFatPct"),
-            )
-        except UploadError as e:
-            logger.error("[%s] Body comp upload failed: %s", date_str, e)
-            upload_ok = False
+    if effective_pages is None or "body-composition" in effective_pages:
+        body_comp = parse_body_comp(result.responses)
+        if body_comp and uploader:
+            try:
+                uploader.upload_body_comp(body_comp)
+                logger.info(
+                    "[%s] Body comp: weight=%s bf=%s%%",
+                    date_str,
+                    body_comp.get("weightKg"),
+                    body_comp.get("bodyFatPct"),
+                )
+            except UploadError as e:
+                logger.error("[%s] Body comp upload failed: %s", date_str, e)
+                upload_ok = False
 
     # Personal records (only for today)
-    if is_today:
+    if is_today and (effective_pages is None or "personal-records" in effective_pages):
         records = parse_records(result.responses)
         if records and uploader:
             try:

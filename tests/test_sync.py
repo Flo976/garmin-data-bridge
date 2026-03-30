@@ -1,10 +1,11 @@
 import argparse
 from datetime import date, timedelta
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.scraper import ALL_PAGES, DEFAULT_PAGES
-from src.sync import _build_date_list, _parse_pages, _validate_date
+from src.sync import _build_date_list, _parse_pages, _sync_one_day, _validate_date
 
 
 def _args(**kwargs):
@@ -92,3 +93,152 @@ def test_parse_pages_env_var(monkeypatch):
 def test_parse_pages_cli_overrides_env(monkeypatch):
     monkeypatch.setenv("SYNC_PAGES", "daily")
     assert _parse_pages("sleep,activities") == {"sleep", "activities"}
+
+
+# --- _sync_one_day upload-gating tests ---
+
+
+def _make_sync_one_day_mocks(responses=None):
+    """Return a (mock_page, mock_uploader, mock_result) tuple for _sync_one_day tests."""
+    mock_result = MagicMock()
+    mock_result.responses = responses or {}
+    mock_result.is_complete = True
+    mock_result.pages_failed = set()
+    mock_result.pages_loaded = {"daily"}
+    mock_page = MagicMock()
+    mock_uploader = MagicMock()
+    return mock_page, mock_uploader, mock_result
+
+
+def test_sync_one_day_skips_personal_records_upload_when_not_in_pages():
+    """Personal records should not be uploaded when 'personal-records' not in pages."""
+    mock_page, mock_uploader, mock_result = _make_sync_one_day_mocks()
+    fake_records = [{"type": "pr_fastest_5k", "value": 1380.0, "date": "2026-01-01", "activityId": 1}]
+
+    with (
+        patch("src.sync.sync_day", return_value=(mock_result, mock_page)),
+        patch("src.sync.parse_daily_summary", return_value={"steps": 5000, "date": "2026-03-29"}),
+        patch("src.sync.has_data", return_value=True),
+        patch("src.sync.parse_activities_list", return_value=[]),
+        patch("src.sync.parse_body_comp", return_value=None),
+        patch("src.sync.parse_bb_events", return_value=None),
+        patch("src.sync.parse_records", return_value=fake_records),
+    ):
+        ok, _ = _sync_one_day(
+            page=mock_page,
+            date_str="2026-03-29",
+            uploader=mock_uploader,
+            dry_run=False,
+            is_today=True,
+            pages={"daily"},
+        )
+
+    mock_uploader.upload_personal_records.assert_not_called()
+    assert ok is True
+
+
+def test_sync_one_day_uploads_personal_records_when_in_pages():
+    """Personal records should be uploaded when 'personal-records' is in pages."""
+    mock_page, mock_uploader, mock_result = _make_sync_one_day_mocks()
+    fake_records = [{"type": "pr_fastest_5k", "value": 1380.0, "date": "2026-01-01", "activityId": 1}]
+
+    with (
+        patch("src.sync.sync_day", return_value=(mock_result, mock_page)),
+        patch("src.sync.parse_daily_summary", return_value={"steps": 5000, "date": "2026-03-29"}),
+        patch("src.sync.has_data", return_value=True),
+        patch("src.sync.parse_activities_list", return_value=[]),
+        patch("src.sync.parse_body_comp", return_value=None),
+        patch("src.sync.parse_bb_events", return_value=None),
+        patch("src.sync.parse_records", return_value=fake_records),
+    ):
+        ok, _ = _sync_one_day(
+            page=mock_page,
+            date_str="2026-03-29",
+            uploader=mock_uploader,
+            dry_run=False,
+            is_today=True,
+            pages={"daily", "personal-records"},
+        )
+
+    mock_uploader.upload_personal_records.assert_called_once()
+
+
+def test_sync_one_day_skips_body_comp_upload_when_not_in_pages():
+    """Body composition should not be uploaded when 'body-composition' not in pages."""
+    mock_page, mock_uploader, mock_result = _make_sync_one_day_mocks()
+    fake_body_comp = {"weightKg": 75.4, "bodyFatPct": 18.5}
+
+    with (
+        patch("src.sync.sync_day", return_value=(mock_result, mock_page)),
+        patch("src.sync.parse_daily_summary", return_value={"steps": 5000, "date": "2026-03-29"}),
+        patch("src.sync.has_data", return_value=True),
+        patch("src.sync.parse_activities_list", return_value=[]),
+        patch("src.sync.parse_body_comp", return_value=fake_body_comp),
+        patch("src.sync.parse_bb_events", return_value=None),
+        patch("src.sync.parse_records", return_value=[]),
+    ):
+        ok, _ = _sync_one_day(
+            page=mock_page,
+            date_str="2026-03-29",
+            uploader=mock_uploader,
+            dry_run=False,
+            is_today=True,
+            pages={"daily"},
+        )
+
+    mock_uploader.upload_body_comp.assert_not_called()
+    assert ok is True
+
+
+def test_sync_one_day_uploads_body_comp_when_in_pages():
+    """Body composition should be uploaded when 'body-composition' is in pages."""
+    mock_page, mock_uploader, mock_result = _make_sync_one_day_mocks()
+    fake_body_comp = {"weightKg": 75.4, "bodyFatPct": 18.5}
+
+    with (
+        patch("src.sync.sync_day", return_value=(mock_result, mock_page)),
+        patch("src.sync.parse_daily_summary", return_value={"steps": 5000, "date": "2026-03-29"}),
+        patch("src.sync.has_data", return_value=True),
+        patch("src.sync.parse_activities_list", return_value=[]),
+        patch("src.sync.parse_body_comp", return_value=fake_body_comp),
+        patch("src.sync.parse_bb_events", return_value=None),
+        patch("src.sync.parse_records", return_value=[]),
+    ):
+        ok, _ = _sync_one_day(
+            page=mock_page,
+            date_str="2026-03-29",
+            uploader=mock_uploader,
+            dry_run=False,
+            is_today=True,
+            pages={"daily", "body-composition"},
+        )
+
+    mock_uploader.upload_body_comp.assert_called_once()
+
+
+def test_sync_one_day_all_uploads_when_pages_is_none():
+    """When pages=None (default), all upload types should fire if data is present."""
+    mock_page, mock_uploader, mock_result = _make_sync_one_day_mocks()
+    fake_records = [{"type": "pr_fastest_5k", "value": 1380.0, "date": "2026-01-01", "activityId": 1}]
+    fake_body_comp = {"weightKg": 75.4, "bodyFatPct": 18.5}
+
+    with (
+        patch("src.sync.sync_day", return_value=(mock_result, mock_page)),
+        patch("src.sync.parse_daily_summary", return_value={"steps": 5000, "date": "2026-03-29"}),
+        patch("src.sync.has_data", return_value=True),
+        patch("src.sync.parse_activities_list", return_value=[]),
+        patch("src.sync.parse_body_comp", return_value=fake_body_comp),
+        patch("src.sync.parse_bb_events", return_value=None),
+        patch("src.sync.parse_records", return_value=fake_records),
+    ):
+        ok, _ = _sync_one_day(
+            page=mock_page,
+            date_str="2026-03-29",
+            uploader=mock_uploader,
+            dry_run=False,
+            is_today=True,
+            pages=None,
+        )
+
+    mock_uploader.upload_body_comp.assert_called_once()
+    mock_uploader.upload_personal_records.assert_called_once()
