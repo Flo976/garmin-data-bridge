@@ -121,10 +121,13 @@ def _navigate(
     result: SyncResult,
     label: str,
     context: BrowserContext | None = None,
+    response_handler: Callable | None = None,
 ) -> Page:
     """Navigate to a page and track success/failure.
 
     Returns the page (may be a new page if recovery was needed).
+    When a crash is detected and recovery creates a new page, response_handler
+    is automatically reattached so subsequent captures are not lost.
     """
     if _is_page_crashed(page):
         if context is None:
@@ -132,6 +135,8 @@ def _navigate(
             result.pages_failed.add(label)
             return page
         page = _recover_page(page, context)
+        if response_handler is not None:
+            page.on("response", response_handler)
 
     try:
         logger.info("Loading %s", label)
@@ -141,6 +146,8 @@ def _navigate(
         result.pages_failed.add(label)
         if context and _is_page_crashed(page):
             page = _recover_page(page, context)
+            if response_handler is not None:
+                page.on("response", response_handler)
         return page
 
     # Wait for API responses — networkidle timeout is non-fatal because
@@ -193,6 +200,7 @@ def sync_day(
                 result,
                 f"daily summary ({date_str})",
                 context,
+                handler,
             )
 
         if "sleep" in pages:
@@ -202,6 +210,7 @@ def sync_day(
                 result,
                 f"sleep ({date_str})",
                 context,
+                handler,
             )
 
         if "training-status" in pages:
@@ -211,6 +220,7 @@ def sync_day(
                 result,
                 f"training status ({date_str})",
                 context,
+                handler,
             )
 
         if "body-composition" in pages:
@@ -220,6 +230,7 @@ def sync_day(
                 result,
                 "body composition",
                 context,
+                handler,
             )
 
         if "activities" in pages:
@@ -229,6 +240,7 @@ def sync_day(
                 result,
                 "activities",
                 context,
+                handler,
             )
 
         if "personal-records" in pages:
@@ -238,6 +250,7 @@ def sync_day(
                 result,
                 "personal records",
                 context,
+                handler,
             )
 
     finally:
