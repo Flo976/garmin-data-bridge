@@ -117,6 +117,26 @@ def _build_date_list(args: argparse.Namespace) -> list[str]:
     return [date.today().isoformat()]
 
 
+def _parse_idle_timeout() -> int:
+    """Read NETWORK_IDLE_TIMEOUT_MS from env (default 5000ms).
+
+    Garmin's SPA never reaches true networkidle, so this controls how long we
+    wait after domcontentloaded for background API responses to arrive before
+    moving on.  Increase it on slow connections; decrease it to speed up syncs
+    when your responses arrive quickly.
+    """
+    val = os.getenv("NETWORK_IDLE_TIMEOUT_MS")
+    if val is None:
+        return 5_000
+    try:
+        timeout = int(val)
+        if timeout < 0:
+            raise ValueError
+        return timeout
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"NETWORK_IDLE_TIMEOUT_MS must be a non-negative integer, got: {val!r}")
+
+
 def _parse_pages(pages_arg: str | None) -> set[str]:
     """Parse --pages argument into a set of page names.
 
@@ -145,6 +165,7 @@ def _sync_one_day(
     is_today: bool,
     pages: set[str] | None = None,
     context=None,
+    idle_timeout_ms: int = 5_000,
 ) -> tuple[bool, object]:
     """Sync a single day. Returns (success, page) — page may change after crash recovery."""
     # Filter activities/records to today only (avoids re-uploading on backfill)
@@ -152,7 +173,14 @@ def _sync_one_day(
     if effective_pages is not None and not is_today:
         effective_pages = effective_pages - {"activities", "personal-records"}
 
-    result, page = sync_day(page, date_str, include_activities=is_today, pages=effective_pages, context=context)
+    result, page = sync_day(
+        page,
+        date_str,
+        include_activities=is_today,
+        pages=effective_pages,
+        context=context,
+        idle_timeout_ms=idle_timeout_ms,
+    )
 
     daily = parse_daily_summary(result.responses, date_str)
     include_act = is_today and (effective_pages is None or "activities" in effective_pages)
@@ -251,6 +279,7 @@ def main() -> None:
 
     try:
         pages = _parse_pages(args.pages)
+        idle_timeout_ms = _parse_idle_timeout()
     except argparse.ArgumentTypeError as e:
         logger.error(str(e))
         sys.exit(1)
@@ -296,6 +325,7 @@ def main() -> None:
                         is_today,
                         pages=pages,
                         context=context,
+                        idle_timeout_ms=idle_timeout_ms,
                     )
                     if ok and not args.dry_run:
                         state.mark_synced(date_str)

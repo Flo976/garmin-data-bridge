@@ -206,3 +206,28 @@ def test_navigate_success_adds_to_loaded():
 
     assert "daily summary (2026-03-29)" in result.pages_loaded
     assert returned_page is page
+
+
+# ---------------------------------------------------------------------------
+# _navigate: idle_timeout_ms is forwarded to wait_for_load_state
+# ---------------------------------------------------------------------------
+
+
+def test_navigate_passes_idle_timeout_to_wait_for_load_state():
+    """The idle_timeout_ms parameter must be forwarded to wait_for_load_state."""
+    page = _make_page()
+    result = SyncResult()
+
+    _navigate(page, "https://example.com", result, "daily summary (2026-03-29)", idle_timeout_ms=3_000)
+
+    page.wait_for_load_state.assert_called_once_with("networkidle", timeout=3_000)
+
+
+def test_navigate_default_idle_timeout_is_5_seconds():
+    """Default idle_timeout_ms should be 5000ms."""
+    page = _make_page()
+    result = SyncResult()
+
+    _navigate(page, "https://example.com", result, "sleep (2026-03-29)")
+
+    page.wait_for_load_state.assert_called_once_with("networkidle", timeout=5_000)
