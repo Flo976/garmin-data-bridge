@@ -1,8 +1,8 @@
-"""Tests for scraper crash-recovery and response-handler reattachment."""
+"""Tests for scraper crash-recovery, response-handler reattachment, and CF handling."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
-from src.scraper import SyncResult, _navigate, _recover_page
+from src.scraper import SyncResult, _handle_cloudflare_challenge, _navigate, _recover_page
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -231,3 +231,113 @@ def test_navigate_default_idle_timeout_is_5_seconds():
     _navigate(page, "https://example.com", result, "sleep (2026-03-29)")
 
     page.wait_for_load_state.assert_called_once_with("networkidle", timeout=5_000)
+
+
+# ---------------------------------------------------------------------------
+# _handle_cloudflare_challenge
+# ---------------------------------------------------------------------------
+
+
+def _make_cf_page(cf_content: bool = False, resolves_after: int | None = None) -> MagicMock:
+    """Return a mock Page for Cloudflare challenge tests.
+
+    Args:
+        cf_content: If True, first content() call returns CF challenge HTML.
+        resolves_after: If set, content() returns CF content for this many
+            additional calls (during polling) then switches to normal HTML.
+    """
+    page = MagicMock()
+    normal_html = "<html><body>Garmin Connect</body></html>"
+    cf_html = "<html><body>just a moment...</body></html>"
+
+    if not cf_content:
+        page.content.return_value = normal_html
+        return page
+
+    if resolves_after is None:
+        # Always CF content (timeout scenario)
+        page.content.return_value = cf_html
+    else:
+        # CF content for initial check + resolves_after polls, then normal
+        side_effects = [cf_html] * (1 + resolves_after) + [normal_html]
+        page.content.side_effect = side_effects
+
+    # iframe/frame_locator setup: no checkbox found by default
+    frame_locator = MagicMock()
+    checkbox = MagicMock()
+    checkbox.count.return_value = 0
+    frame_locator.locator.return_value = checkbox
+    page.frame_locator.return_value = frame_locator
+
+    return page
+
+
+def test_cf_no_challenge_returns_false():
+    """Returns False immediately when no Cloudflare challenge is present."""
+    page = _make_cf_page(cf_content=False)
+    result = _handle_cloudflare_challenge(page)
+    assert result is False
+    page.frame_locator.assert_not_called()
+
+
+def test_cf_resolves_quickly_returns_true():
+    """Returns True when the challenge resolves within the polling window."""
+    page = _make_cf_page(cf_content=True, resolves_after=2)
+
+    with patch("src.scraper.random.uniform", return_value=1.0), patch("src.scraper.time.sleep"):
+        result = _handle_cloudflare_challenge(page)
+
+    assert result is True
+
+
+def test_cf_times_out_returns_true():
+    """Returns True even when challenge never resolves (timeout case)."""
+    page = _make_cf_page(cf_content=True, resolves_after=None)
+
+    with patch("src.scraper.random.uniform", return_value=1.0), patch("src.scraper.time.sleep"):
+        result = _handle_cloudflare_challenge(page)
+
+    assert result is True
+
+
+def test_cf_jitter_sleep_called():
+    """A sleep call with the jitter value is made before polling."""
+    page = _make_cf_page(cf_content=True, resolves_after=0)
+
+    with (
+        patch("src.scraper.random.uniform", return_value=3.7) as mock_uniform,
+        patch("src.scraper.time.sleep") as mock_sleep,
+    ):
+        _handle_cloudflare_challenge(page)
+
+    mock_uniform.assert_called_once_with(1.0, 5.0)
+    # First sleep call should use the jitter value
+    assert mock_sleep.call_args_list[0] == call(3.7)
+
+
+def test_cf_clicks_checkbox_when_found():
+    """Clicks the Turnstile checkbox when the iframe and element are found."""
+    page = _make_cf_page(cf_content=True, resolves_after=1)
+
+    # Override the default "count=0" to simulate a found checkbox
+    checkbox = MagicMock()
+    checkbox.count.return_value = 1
+    frame_locator = MagicMock()
+    frame_locator.locator.return_value = checkbox
+    page.frame_locator.return_value = frame_locator
+
+    with patch("src.scraper.random.uniform", return_value=1.0), patch("src.scraper.time.sleep"):
+        _handle_cloudflare_challenge(page)
+
+    checkbox.first.click.assert_called_once_with(timeout=5_000)
+
+
+def test_navigate_calls_cf_handler_after_goto():
+    """_navigate must call _handle_cloudflare_challenge after a successful goto."""
+    page = _make_page()
+    result = SyncResult()
+
+    with patch("src.scraper._handle_cloudflare_challenge") as mock_cf:
+        _navigate(page, "https://example.com", result, "daily summary (2026-03-29)")
+
+    mock_cf.assert_called_once_with(page)
