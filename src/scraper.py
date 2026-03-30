@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import time
 from dataclasses import dataclass, field
 from typing import Callable
@@ -48,6 +49,53 @@ _CAPTURE_PATTERNS: list[tuple[str, str]] = [
     # Personal records page
     ("personalrecord-service/personalrecord/prs", "personalRecords"),
 ]
+
+
+_CF_MARKERS = ("just a moment", "checking your browser")
+_CF_RESOLVE_POLL_S = 30
+
+
+def _handle_cloudflare_challenge(page: Page) -> bool:
+    """Detect and handle a Cloudflare challenge page encountered during navigation.
+
+    When Cloudflare intercepts a request it shows either a JS auto-solve page
+    ("Just a moment") or an interactive Turnstile checkbox.  This function:
+
+    1. Returns immediately if no CF challenge is present.
+    2. Waits a short random jitter (1–5 s) to look more human-like.
+    3. Tries to click the Turnstile checkbox inside the CF iframe if visible.
+    4. Polls up to 30 s for the challenge to disappear.
+
+    Returns True if a challenge was detected (resolved or timed out), False otherwise.
+    """
+    content = page.content().lower()
+    if not any(m in content for m in _CF_MARKERS):
+        return False
+
+    jitter = random.uniform(1.0, 5.0)  # nosec B311 — jitter delay, not cryptographic
+    logger.info("Cloudflare challenge detected — waiting %.1fs before attempting solve", jitter)
+    time.sleep(jitter)
+
+    # Attempt to click the interactive Turnstile checkbox (inside CF iframe)
+    try:
+        cf_frame = page.frame_locator("iframe[src*='challenges.cloudflare.com']")
+        checkbox = cf_frame.locator("input[type='checkbox'], [role='checkbox'], .ctp-checkbox-label")
+        if checkbox.count() > 0:
+            checkbox.first.click(timeout=5_000)
+            logger.info("Clicked Cloudflare challenge checkbox")
+    except Exception as e:
+        logger.debug("Could not click Cloudflare checkbox (may auto-solve): %s", e)
+
+    # Poll until the challenge page is gone
+    for elapsed in range(_CF_RESOLVE_POLL_S):
+        time.sleep(1)
+        content = page.content().lower()
+        if not any(m in content for m in _CF_MARKERS):
+            logger.info("Cloudflare challenge resolved after %ds", elapsed + 1)
+            return True
+
+    logger.warning("Cloudflare challenge did not resolve within %ds", _CF_RESOLVE_POLL_S)
+    return True
 
 
 @dataclass
@@ -150,6 +198,8 @@ def _navigate(
             if response_handler is not None:
                 page.on("response", response_handler)
         return page
+
+    _handle_cloudflare_challenge(page)
 
     # Wait for API responses — networkidle timeout is non-fatal because
     # Garmin's SPA keeps background requests running indefinitely.
