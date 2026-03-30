@@ -136,13 +136,21 @@ def _navigate(
     try:
         logger.info("Loading %s", label)
         page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-        page.wait_for_load_state("networkidle", timeout=15_000)
-        result.pages_loaded.add(label)
     except Exception as e:
         logger.warning("Page load failed for %s: %s", label, e)
         result.pages_failed.add(label)
         if context and _is_page_crashed(page):
             page = _recover_page(page, context)
+        return page
+
+    # Wait for API responses — networkidle timeout is non-fatal because
+    # Garmin's SPA keeps background requests running indefinitely.
+    # The response handler captures data regardless.
+    try:
+        page.wait_for_load_state("networkidle", timeout=15_000)
+    except Exception:
+        logger.debug("networkidle timeout for %s (non-fatal, data captured via handler)", label)
+    result.pages_loaded.add(label)
 
     return page
 
