@@ -173,6 +173,13 @@ def _sync_one_day(
     if effective_pages is not None and not is_today:
         effective_pages = effective_pages - {"activities", "personal-records"}
 
+    # If every requested page was filtered out (e.g. --pages activities on a historical
+    # date), there is nothing to do.  Skip gracefully rather than letting sync_day
+    # return 0 pages loaded, which would be misreported as a partial-data failure.
+    if effective_pages is not None and not effective_pages:
+        logger.debug("[%s] No applicable pages for this date — skipping", date_str)
+        return True, page
+
     result, page = sync_day(
         page,
         date_str,

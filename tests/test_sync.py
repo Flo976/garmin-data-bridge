@@ -272,3 +272,70 @@ def test_sync_one_day_all_uploads_when_pages_is_none():
 
     mock_uploader.upload_body_comp.assert_called_once()
     mock_uploader.upload_personal_records.assert_called_once()
+
+
+def test_sync_one_day_skips_gracefully_when_all_pages_filtered_for_backfill():
+    """When every requested page is today-only and the date is not today,
+    _sync_one_day should return success without calling sync_day at all."""
+    mock_page = MagicMock()
+    mock_uploader = MagicMock()
+
+    with patch("src.sync.sync_day") as mock_sync_day:
+        ok, returned_page = _sync_one_day(
+            page=mock_page,
+            date_str="2026-03-28",
+            uploader=mock_uploader,
+            dry_run=False,
+            is_today=False,
+            pages={"activities"},
+        )
+
+    mock_sync_day.assert_not_called()
+    mock_uploader.upload_daily_summary.assert_not_called()
+    assert ok is True
+    assert returned_page is mock_page
+
+
+def test_sync_one_day_skips_gracefully_for_activities_and_records_only():
+    """activities + personal-records together on a backfill date should also skip."""
+    mock_page = MagicMock()
+    mock_uploader = MagicMock()
+
+    with patch("src.sync.sync_day") as mock_sync_day:
+        ok, _ = _sync_one_day(
+            page=mock_page,
+            date_str="2026-03-28",
+            uploader=mock_uploader,
+            dry_run=False,
+            is_today=False,
+            pages={"activities", "personal-records"},
+        )
+
+    mock_sync_day.assert_not_called()
+    assert ok is True
+
+
+def test_sync_one_day_does_not_skip_when_non_today_only_page_in_set():
+    """If at least one non-today-only page is requested, sync should proceed normally."""
+    mock_page, mock_uploader, mock_result = _make_sync_one_day_mocks()
+
+    with (
+        patch("src.sync.sync_day", return_value=(mock_result, mock_page)) as mock_sync_day,
+        patch("src.sync.parse_daily_summary", return_value={"steps": 1000, "date": "2026-03-28"}),
+        patch("src.sync.has_data", return_value=True),
+        patch("src.sync.parse_activities_list", return_value=[]),
+        patch("src.sync.parse_body_comp", return_value=None),
+        patch("src.sync.parse_bb_events", return_value=None),
+        patch("src.sync.parse_records", return_value=[]),
+    ):
+        ok, _ = _sync_one_day(
+            page=mock_page,
+            date_str="2026-03-28",
+            uploader=mock_uploader,
+            dry_run=False,
+            is_today=False,
+            pages={"daily", "activities"},
+        )
+
+    # sync_day must be called — "daily" survives the today-only filter
+    mock_sync_day.assert_called_once()
