@@ -1,8 +1,9 @@
 """Tests for scraper crash-recovery, response-handler reattachment, and CF handling."""
 
+import logging
 from unittest.mock import MagicMock, call, patch
 
-from src.scraper import SyncResult, _handle_cloudflare_challenge, _navigate, _recover_page
+from src.scraper import SyncResult, _handle_cloudflare_challenge, _navigate, _recover_page, sync_day
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -341,3 +342,91 @@ def test_navigate_calls_cf_handler_after_goto():
         _navigate(page, "https://example.com", result, "daily summary (2026-03-29)")
 
     mock_cf.assert_called_once_with(page)
+
+
+# ---------------------------------------------------------------------------
+# _navigate: crash detected during networkidle wait
+# ---------------------------------------------------------------------------
+
+
+def test_navigate_crash_during_networkidle_logs_warning_not_timeout(caplog):
+    """When the page crashes during the networkidle wait the log should say
+    'crashed' — not the misleading 'networkidle timeout' message."""
+    page = MagicMock()
+    # First evaluate: pre-navigation crash check → page alive.
+    # Second evaluate: _is_page_crashed called inside the networkidle except
+    #                  block → page has now crashed.
+    page.evaluate.side_effect = [1, Exception("page crashed")]
+    page.wait_for_load_state.side_effect = Exception("Target closed")
+    result = SyncResult()
+
+    with caplog.at_level(logging.WARNING, logger="src.scraper"):
+        _navigate(page, "https://example.com", result, "body composition")
+
+    assert any("crashed" in record.message for record in caplog.records)
+    assert not any("networkidle timeout" in record.message for record in caplog.records)
+
+
+def test_navigate_networkidle_timeout_no_crash_logs_debug_only(caplog):
+    """A plain networkidle timeout (page still alive) must NOT emit a WARNING."""
+    page = _make_page()  # page.evaluate always returns 1
+    page.wait_for_load_state.side_effect = Exception("Timeout 5000ms exceeded")
+    result = SyncResult()
+
+    with caplog.at_level(logging.DEBUG, logger="src.scraper"):
+        _navigate(page, "https://example.com", result, "sleep (2026-03-29)")
+
+    warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+    assert not warning_messages
+    # debug message should be present
+    assert any("networkidle timeout" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# sync_day: cascade crash recovery (issue #2)
+# ---------------------------------------------------------------------------
+
+
+def test_sync_day_cascade_crash_recovery():
+    """After a crash during body-composition navigation, subsequent pages
+    (activities, personal-records) must load successfully on the recovered page,
+    and the response handler must be active to capture data from them.
+
+    This reproduces the original cascade failure reported in issue #2.
+    """
+    # Original page: alive initially, but crashes when body-composition goto fires.
+    original_page = MagicMock()
+    original_page.evaluate.side_effect = [
+        1,  # pre-crash check before body-composition goto
+        Exception("page crashed"),  # post-goto crash detection
+    ]
+    original_page.goto.side_effect = Exception("Page.goto: Page crashed")
+
+    # Recovered page: healthy for all subsequent navigations.
+    recovered_page = MagicMock()
+    recovered_page.evaluate.return_value = 1
+
+    context = MagicMock()
+    context.new_page.return_value = recovered_page
+
+    with patch("src.scraper.time.sleep"), patch("src.scraper._handle_cloudflare_challenge"):
+        result, final_page = sync_day(
+            original_page,
+            "2026-03-29",
+            pages={"body-composition", "activities", "personal-records"},
+            context=context,
+        )
+
+    # body-composition failed due to crash
+    assert "body composition" in result.pages_failed
+
+    # activities and personal-records should have succeeded on the recovered page
+    assert "activities" in result.pages_loaded
+    assert "personal records" in result.pages_loaded
+
+    # The final page returned must be the recovered page, not the crashed one
+    assert final_page is recovered_page
+
+    # The handler must have been reattached: recovered_page.on("response", ...) called
+    on_calls = [c for c in recovered_page.on.call_args_list if c.args[0] == "response"]
+    assert on_calls, "Response handler was not reattached to the recovered page"

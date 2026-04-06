@@ -207,7 +207,13 @@ def _navigate(
     try:
         page.wait_for_load_state("networkidle", timeout=idle_timeout_ms)
     except Exception:
-        logger.debug("networkidle timeout for %s (non-fatal, data captured via handler)", label)
+        if _is_page_crashed(page):
+            logger.warning(
+                "Page crashed during networkidle wait for %s — recovery will happen on next navigation",
+                label,
+            )
+        else:
+            logger.debug("networkidle timeout for %s (non-fatal, data captured via handler)", label)
     result.pages_loaded.add(label)
 
     return page
