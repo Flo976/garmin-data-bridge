@@ -197,6 +197,18 @@ def _navigate(
             page = _recover_page(page, context)
             if response_handler is not None:
                 page.on("response", response_handler)
+        else:
+            # Stop any in-progress loading so the next navigation does not
+            # trigger a crash (e.g. a heavy page times out but keeps running
+            # in the background and crashes the browser on the next goto).
+            try:
+                page.goto("about:blank", wait_until="domcontentloaded", timeout=5_000)
+            except Exception:
+                logger.debug("Could not reset to about:blank after %s failed", label)
+                if context and _is_page_crashed(page):
+                    page = _recover_page(page, context)
+                    if response_handler is not None:
+                        page.on("response", response_handler)
         return page
 
     _handle_cloudflare_challenge(page)

@@ -178,12 +178,13 @@ def test_navigate_crash_during_goto_no_handler():
 # ---------------------------------------------------------------------------
 
 
-def test_navigate_timeout_marks_failed_no_recovery():
+def test_navigate_timeout_resets_to_blank():
     """A timeout where the page did NOT crash should mark the page as failed
-    but keep the same page object (no recovery needed)."""
-    page = _make_page(goto_raises=Exception("Timeout 15000ms exceeded"))
-    # Page still responds to evaluate → not crashed
-    page.evaluate.return_value = 1
+    and navigate to about:blank to stop background loading."""
+    page = MagicMock()
+    # First goto raises (timeout), second (about:blank reset) succeeds
+    page.goto.side_effect = [Exception("Timeout 15000ms exceeded"), None]
+    page.evaluate.return_value = 1  # page not crashed
 
     result = SyncResult()
 
@@ -191,6 +192,42 @@ def test_navigate_timeout_marks_failed_no_recovery():
 
     assert "sleep (2026-03-29)" in result.pages_failed
     assert returned_page is page
+    assert page.goto.call_count == 2
+    assert page.goto.call_args_list[1][0][0] == "about:blank"
+
+
+def test_navigate_timeout_then_cascade_crash_recovers():
+    """After a timeout, if about:blank navigation also crashes the page,
+    a new page is created to prevent cascade failures on subsequent navigations."""
+    page = MagicMock()
+    # First goto raises timeout; second (about:blank) raises crash
+    page.goto.side_effect = [
+        Exception("Timeout 30000ms exceeded"),
+        Exception("Page.goto: Page crashed"),
+    ]
+    # pre-check: alive; post-timeout crash check: alive; post-blank crash check: crashed
+    page.evaluate.side_effect = [1, 1, Exception("page crashed")]
+
+    new_page = _make_page()
+    context = _make_context()
+    context.new_page.return_value = new_page
+
+    handler = MagicMock()
+    result = SyncResult()
+
+    with patch("src.scraper.time.sleep"):
+        returned_page = _navigate(
+            page,
+            "https://example.com",
+            result,
+            "training status (2026-03-29)",
+            context,
+            handler,
+        )
+
+    assert "training status (2026-03-29)" in result.pages_failed
+    assert returned_page is new_page
+    new_page.on.assert_called_with("response", handler)
 
 
 # ---------------------------------------------------------------------------
