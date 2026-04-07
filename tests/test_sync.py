@@ -76,7 +76,7 @@ def test_parse_pages_with_spaces():
 
 
 def test_parse_pages_invalid():
-    with pytest.raises(argparse.ArgumentTypeError, match="Unknown page"):
+    with pytest.raises(argparse.ArgumentTypeError, match="Unknown page\\(s\\) in --pages"):
         _parse_pages("daily,banana")
 
 
@@ -93,6 +93,31 @@ def test_parse_pages_env_var(monkeypatch):
 def test_parse_pages_cli_overrides_env(monkeypatch):
     monkeypatch.setenv("SYNC_PAGES", "daily")
     assert _parse_pages("sleep,activities") == {"sleep", "activities"}
+
+
+def test_parse_pages_env_var_empty_string_falls_back_to_defaults(monkeypatch):
+    """SYNC_PAGES='' should silently fall back to defaults, not raise an error."""
+    monkeypatch.setenv("SYNC_PAGES", "")
+    assert _parse_pages(None) == DEFAULT_PAGES
+
+
+def test_parse_pages_env_var_whitespace_only_falls_back_to_defaults(monkeypatch):
+    """SYNC_PAGES with only whitespace/commas falls back to defaults."""
+    monkeypatch.setenv("SYNC_PAGES", "  ,  ")
+    assert _parse_pages(None) == DEFAULT_PAGES
+
+
+def test_parse_pages_env_var_invalid_mentions_sync_pages(monkeypatch):
+    """Error for unknown page from SYNC_PAGES should mention SYNC_PAGES, not --pages."""
+    monkeypatch.setenv("SYNC_PAGES", "daily,banana")
+    with pytest.raises(argparse.ArgumentTypeError, match="SYNC_PAGES"):
+        _parse_pages(None)
+
+
+def test_parse_pages_cli_invalid_mentions_pages_flag():
+    """Error for unknown page from --pages should mention --pages."""
+    with pytest.raises(argparse.ArgumentTypeError, match="--pages"):
+        _parse_pages("daily,banana")
 
 
 # --- _parse_idle_timeout tests ---

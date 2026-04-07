@@ -141,19 +141,24 @@ def _parse_pages(pages_arg: str | None) -> set[str]:
     """Parse --pages argument into a set of page names.
 
     Falls back to SYNC_PAGES env var if --pages is not provided.
+    An empty or whitespace-only SYNC_PAGES value is treated as unset (use defaults).
     """
-    if pages_arg is None:
+    from_env = pages_arg is None
+    if from_env:
         pages_arg = os.getenv("SYNC_PAGES")
     if pages_arg is None:
         return DEFAULT_PAGES.copy()
     requested = {p.strip().lower() for p in pages_arg.split(",") if p.strip()}
+    if not requested:
+        if from_env:
+            return DEFAULT_PAGES.copy()
+        raise argparse.ArgumentTypeError("--pages requires at least one page")
     invalid = requested - ALL_PAGES
     if invalid:
+        source = "SYNC_PAGES" if from_env else "--pages"
         raise argparse.ArgumentTypeError(
-            f"Unknown page(s): {', '.join(sorted(invalid))}. Valid pages: {', '.join(sorted(ALL_PAGES))}"
+            f"Unknown page(s) in {source}: {', '.join(sorted(invalid))}. Valid pages: {', '.join(sorted(ALL_PAGES))}"
         )
-    if not requested:
-        raise argparse.ArgumentTypeError("--pages requires at least one page")
     return requested
 
 
