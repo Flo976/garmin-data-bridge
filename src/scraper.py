@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Callable
@@ -112,6 +113,46 @@ class SyncResult:
         return len(self.pages_failed) == 0 and len(self.pages_loaded) > 0
 
 
+def _extract_multipart_boundary(content_type: str) -> str | None:
+    """Extract the boundary parameter from a multipart Content-Type header value."""
+    match = re.search(r"boundary=([^\s;]+)", content_type, re.IGNORECASE)
+    return match.group(1).strip('"') if match else None
+
+
+def _parse_multipart_graphql_body(raw: bytes, boundary: str) -> dict:
+    """Merge JSON data from all parts of a multipart/mixed GraphQL response.
+
+    Handles both top-level ``data`` fields (initial chunk) and ``incremental``
+    chunks produced by ``@defer`` / ``@stream`` queries.
+    """
+    merged: dict = {}
+    sep = ("--" + boundary).encode()
+    for chunk in raw.split(sep):
+        # Each MIME part: headers + blank line + body
+        for divider in (b"\r\n\r\n", b"\n\n"):
+            if divider not in chunk:
+                continue
+            part_body = chunk.split(divider, 1)[1].strip()
+            if part_body.startswith(b"--"):  # boundary epilogue
+                break
+            try:
+                payload = json.loads(part_body)
+            except Exception:
+                break
+            if not isinstance(payload, dict):
+                break
+            top = payload.get("data")
+            if isinstance(top, dict):
+                merged.update(top)
+            for inc in payload.get("incremental") or []:
+                if isinstance(inc, dict):
+                    inc_data = inc.get("data")
+                    if isinstance(inc_data, dict):
+                        merged.update(inc_data)
+            break
+    return merged
+
+
 def _make_response_handler(captured: dict[str, dict | list]) -> Callable:
     """Create a response handler that captures matched API responses."""
 
@@ -130,14 +171,23 @@ def _make_response_handler(captured: dict[str, dict | list]) -> Callable:
                 break
 
         if "graphql-gateway/graphql" in url:
+            gql_data: dict | None = None
             try:
-                data = response.json()
-                gql_data = data.get("data", {})
-                for gql_key in gql_data:
-                    captured[f"graphql/{gql_key}"] = gql_data[gql_key]
-                    logger.debug("Captured GraphQL: %s", gql_key)
+                content_type = (response.headers.get("content-type") or "").lower()
+                if "multipart/mixed" in content_type:
+                    boundary = _extract_multipart_boundary(content_type)
+                    if boundary:
+                        gql_data = _parse_multipart_graphql_body(response.body(), boundary)
+                else:
+                    payload = response.json()
+                    if isinstance(payload, dict):
+                        gql_data = payload.get("data")
             except Exception:
-                logger.debug("Non-JSON response for graphql-gateway on %s, skipping", url)
+                logger.debug("Failed to parse GraphQL response for %s", url)
+            if gql_data:
+                for gql_key, gql_val in gql_data.items():
+                    captured[f"graphql/{gql_key}"] = gql_val
+                    logger.debug("Captured GraphQL: %s", gql_key)
 
     return handler
 
