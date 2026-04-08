@@ -1,8 +1,17 @@
 """Tests for scraper crash-recovery, response-handler reattachment, and CF handling."""
 
+import json
 from unittest.mock import MagicMock, call, patch
 
-from src.scraper import SyncResult, _handle_cloudflare_challenge, _navigate, _recover_page
+from src.scraper import (
+    SyncResult,
+    _extract_multipart_boundary,
+    _handle_cloudflare_challenge,
+    _make_response_handler,
+    _navigate,
+    _parse_multipart_graphql_body,
+    _recover_page,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -341,3 +350,139 @@ def test_navigate_calls_cf_handler_after_goto():
         _navigate(page, "https://example.com", result, "daily summary (2026-03-29)")
 
     mock_cf.assert_called_once_with(page)
+
+
+# ---------------------------------------------------------------------------
+# _extract_multipart_boundary
+# ---------------------------------------------------------------------------
+
+
+def test_extract_boundary_unquoted():
+    ct = "multipart/mixed; boundary=graphql"
+    assert _extract_multipart_boundary(ct) == "graphql"
+
+
+def test_extract_boundary_quoted():
+    ct = 'multipart/mixed; boundary="-"'
+    assert _extract_multipart_boundary(ct) == "-"
+
+
+def test_extract_boundary_missing():
+    assert _extract_multipart_boundary("application/json") is None
+
+
+def test_extract_boundary_case_insensitive():
+    ct = "multipart/mixed; Boundary=abc123"
+    assert _extract_multipart_boundary(ct) == "abc123"
+
+
+# ---------------------------------------------------------------------------
+# _parse_multipart_graphql_body
+# ---------------------------------------------------------------------------
+
+
+def _make_multipart(boundary: str, parts: list[dict]) -> bytes:
+    """Build a minimal multipart/mixed body from a list of JSON payloads."""
+    lines = []
+    sep = f"--{boundary}"
+    for payload in parts:
+        lines.append(sep)
+        lines.append("Content-Type: application/json")
+        lines.append("")
+        lines.append(json.dumps(payload))
+    lines.append(f"{sep}--")
+    return "\r\n".join(lines).encode()
+
+
+def test_parse_multipart_single_part():
+    body = _make_multipart("graphql", [{"data": {"trainingStatus": {"status": "productive"}}}])
+    result = _parse_multipart_graphql_body(body, "graphql")
+    assert result == {"trainingStatus": {"status": "productive"}}
+
+
+def test_parse_multipart_merges_incremental():
+    parts = [
+        {"data": {"trainingStatus": {"status": "productive"}}, "hasNext": True},
+        {"incremental": [{"data": {"fitnessAge": 30}, "path": []}], "hasNext": False},
+    ]
+    body = _make_multipart("-", parts)
+    result = _parse_multipart_graphql_body(body, "-")
+    assert result["trainingStatus"] == {"status": "productive"}
+    assert result["fitnessAge"] == 30
+
+
+def test_parse_multipart_empty_body():
+    result = _parse_multipart_graphql_body(b"", "graphql")
+    assert result == {}
+
+
+def test_parse_multipart_ignores_invalid_json_parts():
+    boundary = "graphql"
+    sep = f"--{boundary}"
+    body = f"{sep}\r\nContent-Type: application/json\r\n\r\nnot-json\r\n{sep}--".encode()
+    result = _parse_multipart_graphql_body(body, boundary)
+    assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# _make_response_handler — GraphQL branch
+# ---------------------------------------------------------------------------
+
+
+def _make_gql_response(content_type: str, body: bytes | None = None, json_data: dict | None = None) -> MagicMock:
+    """Build a mock Playwright Response for graphql-gateway calls."""
+    resp = MagicMock()
+    resp.status = 200
+    resp.url = "https://connect.garmin.com/gc-api/graphql-gateway/graphql"
+    resp.headers = {"content-type": content_type}
+    if body is not None:
+        resp.body.return_value = body
+    if json_data is not None:
+        resp.json.return_value = json_data
+    else:
+        resp.json.side_effect = ValueError("not JSON")
+    return resp
+
+
+def test_handler_captures_standard_json_graphql():
+    captured: dict = {}
+    handler = _make_response_handler(captured)
+    resp = _make_gql_response(
+        "application/json",
+        json_data={"data": {"trainingStatus": {"status": "productive"}}},
+    )
+    handler(resp)
+    assert "graphql/trainingStatus" in captured
+    assert captured["graphql/trainingStatus"] == {"status": "productive"}
+
+
+def test_handler_captures_multipart_graphql():
+    parts = [
+        {"data": {"trainingStatus": {"status": "productive"}}, "hasNext": True},
+        {"incremental": [{"data": {"fitnessAge": 28}, "path": []}], "hasNext": False},
+    ]
+    body = _make_multipart("graphql", parts)
+    captured: dict = {}
+    handler = _make_response_handler(captured)
+    resp = _make_gql_response("multipart/mixed; boundary=graphql", body=body)
+    handler(resp)
+    assert captured.get("graphql/trainingStatus") == {"status": "productive"}
+    assert captured.get("graphql/fitnessAge") == 28
+
+
+def test_handler_skips_graphql_when_no_boundary():
+    captured: dict = {}
+    handler = _make_response_handler(captured)
+    resp = _make_gql_response("multipart/mixed")  # no boundary param
+    resp.body.return_value = b""
+    handler(resp)
+    assert not any(k.startswith("graphql/") for k in captured)
+
+
+def test_handler_skips_graphql_on_exception():
+    captured: dict = {}
+    handler = _make_response_handler(captured)
+    resp = _make_gql_response("multipart/mixed; boundary=graphql")
+    resp.body.side_effect = RuntimeError("network error")
+    handler(resp)  # must not raise
+    assert not any(k.startswith("graphql/") for k in captured)
