@@ -1,5 +1,11 @@
 config.env
 .env
+.env.*
+*.pem
+*.key
+credentials.json
+service-account*.json
+
 __pycache__/
 *.pyc
 .venv/
@@ -8,4 +14,12 @@ browser-data/
 .pytest_cache/
 *.local
 dist/
+build/
 *.egg-info/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+.DS_Store
+Thumbs.db
