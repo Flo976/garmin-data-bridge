@@ -341,3 +341,77 @@ def test_navigate_calls_cf_handler_after_goto():
         _navigate(page, "https://example.com", result, "daily summary (2026-03-29)")
 
     mock_cf.assert_called_once_with(page)
+
+
+# ---------------------------------------------------------------------------
+# _navigate: crash during wait_for_load_state (networkidle)
+# ---------------------------------------------------------------------------
+
+
+def test_navigate_crash_during_networkidle_marks_failed_and_reattaches():
+    """A page crash during wait_for_load_state must be treated as a crash,
+    not a non-fatal networkidle timeout: mark failed, recover, reattach handler."""
+    page = MagicMock()
+    # Pre-nav check sees page alive; crash is detected on the second evaluate
+    # call inside the except block.
+    page.evaluate.side_effect = [1, Exception("page crashed")]
+    page.wait_for_load_state.side_effect = Exception("Page crashed")
+
+    new_page = _make_page()
+    context = _make_context()
+    context.new_page.return_value = new_page
+
+    handler = MagicMock()
+    result = SyncResult()
+
+    with patch("src.scraper.time.sleep"), patch("src.scraper._handle_cloudflare_challenge"):
+        returned_page = _navigate(
+            page,
+            "https://example.com",
+            result,
+            "body composition",
+            context,
+            handler,
+        )
+
+    assert "body composition" in result.pages_failed
+    assert "body composition" not in result.pages_loaded
+    new_page.on.assert_called_with("response", handler)
+    assert returned_page is new_page
+
+
+def test_navigate_crash_during_networkidle_no_context_marks_failed():
+    """Without a context, a crash during wait_for_load_state marks the page as
+    failed and returns the crashed page (no recovery possible)."""
+    page = MagicMock()
+    page.evaluate.side_effect = [1, Exception("page crashed")]
+    page.wait_for_load_state.side_effect = Exception("Page crashed")
+
+    result = SyncResult()
+
+    with patch("src.scraper._handle_cloudflare_challenge"):
+        returned_page = _navigate(page, "https://example.com", result, "body composition")
+
+    assert "body composition" in result.pages_failed
+    assert "body composition" not in result.pages_loaded
+    assert returned_page is page
+
+
+def test_navigate_crash_during_networkidle_no_handler():
+    """Crash during wait_for_load_state with context but no handler: recover without on()."""
+    page = MagicMock()
+    page.evaluate.side_effect = [1, Exception("page crashed")]
+    page.wait_for_load_state.side_effect = Exception("Page crashed")
+
+    new_page = _make_page()
+    context = _make_context()
+    context.new_page.return_value = new_page
+
+    result = SyncResult()
+
+    with patch("src.scraper.time.sleep"), patch("src.scraper._handle_cloudflare_challenge"):
+        returned_page = _navigate(page, "https://example.com", result, "sleep (2026-03-29)", context)
+
+    assert "sleep (2026-03-29)" in result.pages_failed
+    new_page.on.assert_not_called()
+    assert returned_page is new_page
