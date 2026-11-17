@@ -140,6 +140,58 @@ def _make_sync_one_day_mocks(responses=None):
     return mock_page, mock_uploader, mock_result
 
 
+def test_sync_one_day_skips_daily_summary_when_daily_not_in_pages():
+    """Daily summary should not be uploaded when 'daily' not in pages."""
+    mock_page, mock_uploader, mock_result = _make_sync_one_day_mocks()
+
+    with (
+        patch("src.sync.sync_day", return_value=(mock_result, mock_page)),
+        patch("src.sync.parse_daily_summary", return_value={"sleepScore": 80, "date": "2026-03-29"}),
+        patch("src.sync.has_data", return_value=True),
+        patch("src.sync.parse_activities_list", return_value=[]),
+        patch("src.sync.parse_body_comp", return_value=None),
+        patch("src.sync.parse_bb_events", return_value=None),
+        patch("src.sync.parse_records", return_value=[]),
+    ):
+        ok, _ = _sync_one_day(
+            page=mock_page,
+            date_str="2026-03-29",
+            uploader=mock_uploader,
+            dry_run=False,
+            is_today=True,
+            pages={"sleep"},
+        )
+
+    mock_uploader.upload_daily_summary.assert_not_called()
+    assert ok is True
+
+
+def test_sync_one_day_uploads_daily_summary_when_daily_in_pages():
+    """Daily summary should be uploaded when 'daily' is in pages."""
+    mock_page, mock_uploader, mock_result = _make_sync_one_day_mocks()
+
+    with (
+        patch("src.sync.sync_day", return_value=(mock_result, mock_page)),
+        patch("src.sync.parse_daily_summary", return_value={"steps": 8000, "date": "2026-03-29"}),
+        patch("src.sync.has_data", return_value=True),
+        patch("src.sync.parse_activities_list", return_value=[]),
+        patch("src.sync.parse_body_comp", return_value=None),
+        patch("src.sync.parse_bb_events", return_value=None),
+        patch("src.sync.parse_records", return_value=[]),
+    ):
+        ok, _ = _sync_one_day(
+            page=mock_page,
+            date_str="2026-03-29",
+            uploader=mock_uploader,
+            dry_run=False,
+            is_today=True,
+            pages={"daily"},
+        )
+
+    mock_uploader.upload_daily_summary.assert_called_once()
+    assert ok is True
+
+
 def test_sync_one_day_skips_personal_records_upload_when_not_in_pages():
     """Personal records should not be uploaded when 'personal-records' not in pages."""
     mock_page, mock_uploader, mock_result = _make_sync_one_day_mocks()

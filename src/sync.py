@@ -195,7 +195,8 @@ def _sync_one_day(
 
     if dry_run:
         logger.info("--- DRY RUN: %s ---", date_str)
-        print(json.dumps(daily, indent=2, default=str))
+        if effective_pages is None or "daily" in effective_pages:
+            print(json.dumps(daily, indent=2, default=str))
         if effective_pages is None or "body-composition" in effective_pages:
             body_comp = parse_body_comp(result.responses)
             if body_comp:
@@ -213,22 +214,23 @@ def _sync_one_day(
 
     upload_ok = True
 
-    if has_data(daily) and uploader:
-        try:
-            uploader.upload_daily_summary(daily)
-            logger.info(
-                "[%s] Daily: steps=%s bb=%s hrv=%s sleep=%s",
-                date_str,
-                daily.get("steps"),
-                daily.get("bodyBattery"),
-                daily.get("hrvGarmin"),
-                daily.get("sleepScore"),
-            )
-        except UploadError as e:
-            logger.error("[%s] Daily summary upload failed: %s", date_str, e)
-            upload_ok = False
-    else:
-        logger.info("[%s] No daily data", date_str)
+    if effective_pages is None or "daily" in effective_pages:
+        if has_data(daily) and uploader:
+            try:
+                uploader.upload_daily_summary(daily)
+                logger.info(
+                    "[%s] Daily: steps=%s bb=%s hrv=%s sleep=%s",
+                    date_str,
+                    daily.get("steps"),
+                    daily.get("bodyBattery"),
+                    daily.get("hrvGarmin"),
+                    daily.get("sleepScore"),
+                )
+            except UploadError as e:
+                logger.error("[%s] Daily summary upload failed: %s", date_str, e)
+                upload_ok = False
+        else:
+            logger.info("[%s] No daily data", date_str)
 
     if uploader:
         for act in activities:
